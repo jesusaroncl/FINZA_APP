@@ -54,53 +54,54 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Email Input */}
-      <AuthInput
-        type="email"
-        placeholder="tu@email.com"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        required
-        disabled={loading}
-      />
+    <form onSubmit={handleSubmit} className="flex flex-col">
+      {/* Inputs */}
+      <div className="space-y-3">
+        <AuthInput
+          type="email"
+          placeholder="sebas2104@gmail.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={loading}
+        />
 
-      {/* Password Input */}
-      <AuthInput
-        type="password"
-        placeholder="••••••••"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        showPasswordToggle
-        showPassword={showPassword}
-        onPasswordToggle={() => setShowPassword(!showPassword)}
-        required
-        disabled={loading}
-      />
+        <AuthInput
+          type="password"
+          placeholder="*******"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          showPasswordToggle
+          showPassword={showPassword}
+          onPasswordToggle={() => setShowPassword(!showPassword)}
+          required
+          disabled={loading}
+        />
+      </div>
 
       {/* Remember Me Checkbox */}
-      <div className="flex items-center">
+      <div className="flex items-center justify-center mt-4 mb-5">
         <input
           type="checkbox"
           id="rememberMe"
           checked={rememberMe}
           onChange={(e) => setRememberMe(e.target.checked)}
-          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+          className="w-[15px] h-[15px] border-[#9CA3AF] rounded-[3px] focus:ring-[#587FD9] text-[#587FD9] cursor-pointer bg-transparent"
           disabled={loading}
         />
         <label
           htmlFor="rememberMe"
-          className="ml-2 text-sm text-gray-700 cursor-pointer"
+          className="ml-2 text-[13px] text-[#6B7280] cursor-pointer select-none font-normal"
         >
           Recordar datos de usuario
         </label>
       </div>
 
       {/* Forgot Password Link */}
-      <div className="text-center">
+      <div className="text-center mb-6">
         <Link
           href="/auth/forgot-password"
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          className="text-[14px] text-[#5C8AEC] transition-colors font-semibold hover:text-[#38508B]"
         >
           ¿Olvidaste tu contraseña?
         </Link>
@@ -108,7 +109,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-4">
           {error}
         </div>
       )}
@@ -117,17 +118,17 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-slate-900 text-white py-3 rounded-lg font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-6"
+        className="w-full bg-[#0B1C3F] text-white py-[16px] rounded-[24px] text-[16px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(11,28,63,0.12)]"
       >
         {loading ? 'Iniciando sesión...' : 'Ingresar'}
       </button>
 
       {/* Register Link */}
-      <p className="text-center text-sm text-gray-600 mt-6">
+      <p className="text-center text-[13px] text-[#6B7280] mt-6">
         ¿Aún no tienes tu cuenta?{' '}
         <Link
           href="/auth/register"
-          className="text-blue-600 font-medium hover:text-blue-700"
+          className="text-[#5C8AEC] font-bold underline underline-offset-2 hover:text-[#38508B] transition-colors"
         >
           Regístrate
         </Link>

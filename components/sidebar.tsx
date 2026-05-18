@@ -34,7 +34,7 @@ export function Sidebar() {
       <div className="p-6 border-b border-gray-200">
         <Link href="/dashboard" className="flex items-center justify-center">
           <Image
-            src="/finza-logo.jpg"
+            src="/logo.png"
             alt="Finza Logo"
             width={40}
             height={40}

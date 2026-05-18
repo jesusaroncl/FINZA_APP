@@ -36,8 +36,8 @@ export const AuthInput = forwardRef<HTMLInputElement, AuthInputProps>(
           <input
             ref={ref}
             type={isPasswordField && showPassword ? 'text' : type}
-            className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-              error ? 'border-red-500' : ''
+            className={`w-full px-5 py-[16px] bg-white border border-gray-200/40 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-[#587FD9] text-[14px] text-black placeholder-black/90 ${
+              error ? 'ring-2 ring-red-500' : ''
             } ${className || ''}`}
             {...props}
           />
@@ -45,12 +45,12 @@ export const AuthInput = forwardRef<HTMLInputElement, AuthInputProps>(
             <button
               type="button"
               onClick={onPasswordToggle}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-5 top-1/2 transform -translate-y-1/2 text-[#9CA3AF] opacity-70 focus:outline-none"
             >
               {showPassword ? (
-                <EyeOff size={20} />
+                <Eye size={20} strokeWidth={1.2} />
               ) : (
-                <Eye size={20} />
+                <EyeOff size={20} strokeWidth={1.2} />
               )}
             </button>
           )}
