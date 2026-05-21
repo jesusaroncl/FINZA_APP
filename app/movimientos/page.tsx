@@ -6,9 +6,12 @@ import {
   TransactionIndicators,
   TransactionTabs,
   TransactionTable,
+  RegistroMovimientos,
+  DeleteConfirmModal,
   type Transaction as BaseTransaction,
 } from '@/components/transactions'
-import { Calendar } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { DateRangePicker, type DateRange } from '@/components/date-range-picker'
 
 type TabType = 'all' | 'income' | 'expense'
 
@@ -16,6 +19,10 @@ interface Transaction extends BaseTransaction {
   transaction_date: string
   user_id: string
   category_id: string | null
+  cuotas?: number
+  interes_tipo?: string
+  interes_tasa?: number
+  monto_por_cuota?: number | null
 }
 
 interface Category {
@@ -32,11 +39,21 @@ interface TransactionStats {
   savings: number
 }
 
+const PAGE_SIZE = 5
+
 export default function MovimientosPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<TabType>('all')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [editingTransaction, setEditingTransaction] = useState<BaseTransaction | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return { start: today, end: today }
+  })
   const [stats, setStats] = useState<TransactionStats>({
     balance: 0,
     income: 0,
@@ -50,11 +67,9 @@ export default function MovimientosPage() {
     const income = txs
       .filter((t) => t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0)
-
     const expense = txs
       .filter((t) => t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0)
-
     return {
       balance: income - expense,
       income,
@@ -65,14 +80,8 @@ export default function MovimientosPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) {
-        console.log('[v0] No user found')
-        return
-      }
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
       const [{ data: txData }, { data: catData }] = await Promise.all([
         supabase
@@ -90,12 +99,9 @@ export default function MovimientosPage() {
         setTransactions(txData)
         setStats(calculateStats(txData))
       }
-
-      if (catData) {
-        setCategories(catData)
-      }
+      if (catData) setCategories(catData)
     } catch (error) {
-      console.error('[v0] Error fetching data:', error)
+      console.error('[movimientos] Error fetching data:', error)
     } finally {
       setLoading(false)
     }
@@ -105,90 +111,207 @@ export default function MovimientosPage() {
     fetchData()
   }, [fetchData])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar esta transacción?')) return
+  // Abre el modal de confirmación
+  const handleDelete = (id: string) => {
+    setDeletingId(id)
+  }
 
-    const { error } = await supabase.from('transactions').delete().eq('id', id)
-
+  // Confirma y ejecuta el borrado
+  const confirmDelete = async () => {
+    if (!deletingId) return
+    const { error } = await supabase.from('transactions').delete().eq('id', deletingId)
     if (!error) {
-      const updated = transactions.filter((t) => t.id !== id)
+      const updated = transactions.filter((t) => t.id !== deletingId)
       setTransactions(updated)
       setStats(calculateStats(updated))
-    } else {
-      console.error('[v0] Error deleting transaction:', error)
     }
+    setDeletingId(null)
   }
+
+  const cancelDelete = () => setDeletingId(null)
 
   const handleEdit = (transaction: BaseTransaction) => {
-    console.log('[v0] Editing transaction:', transaction)
-    // TODO: Implementar modal de edición
+    setEditingTransaction(transaction)
+    // Scroll to top so the panel is visible
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const getFilteredTransactions = (): BaseTransaction[] => {
-    return transactions
-      .filter((t) => {
-        if (activeTab === 'all') return true
-        return t.type === activeTab
-      })
-      .map((t) => ({
-        id: t.id,
-        description: t.description,
-        type: t.type,
-        category: t.category_id ? 'Categoría' : 'Sin categoría',
-        date: t.transaction_date,
-        amount: t.amount,
-      }))
+  const handleEditCancel = () => {
+    setEditingTransaction(null)
   }
+
+  const getCategoryName = (catId: string | null): string => {
+    if (!catId) return 'Sin categoría'
+    const cat = categories.find((c) => c.id === catId)
+    return cat?.name ?? 'Sin categoría'
+  }
+
+  // Filtered by tab + date range
+  const filtered = transactions
+    .filter((t) => {
+      if (activeTab !== 'all' && t.type !== activeTab) return false
+      if (dateRange.start || dateRange.end) {
+        // Extraemos solo YYYY-MM-DD y lo forzamos a medianoche local
+        const [y, m, d] = t.transaction_date.split('T')[0].split('-').map(Number)
+        const txDate = new Date(y, m - 1, d)
+        const rangeStart = dateRange.start && dateRange.end
+          ? (dateRange.start < dateRange.end ? dateRange.start : dateRange.end)
+          : dateRange.start
+        const rangeEnd = dateRange.start && dateRange.end
+          ? (dateRange.start < dateRange.end ? dateRange.end : dateRange.start)
+          : dateRange.end
+        if (rangeStart) { const s = new Date(rangeStart); s.setHours(0,0,0,0); if (txDate < s) return false }
+        if (rangeEnd) { const e = new Date(rangeEnd); e.setHours(23,59,59,999); if (txDate > e) return false }
+      }
+      return true
+    })
+    .map((t) => ({
+      id: t.id,
+      description: t.description,
+      type: t.type,
+      category: getCategoryName(t.category_id),
+      date: t.transaction_date,
+      created_at: t.created_at,
+      amount: t.amount,
+      cuotas: t.cuotas,
+      interes_tipo: t.interes_tipo,
+      interes_tasa: t.interes_tasa,
+      monto_por_cuota: t.monto_por_cuota,
+    }))
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab)
+    setCurrentPage(1)
+  }
+
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-gray-500">Cargando transacciones...</p>
+      <div className="flex items-center justify-center h-full min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div
+            className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+            style={{ borderColor: '#3B82F6', borderTopColor: 'transparent' }}
+          />
+          <p className="text-sm" style={{ color: '#94A3B8' }}>Cargando transacciones...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900 mb-6">Mis Movimientos</h1>
+    <div
+      className="flex flex-col"
+      style={{ height: '100vh', overflow: 'hidden', background: '#F8FAFC', padding: '28px 32px 0 32px' }}
+    >
+      {/* Modal de confirmación de eliminación */}
+      {deletingId && (
+        <DeleteConfirmModal onConfirm={confirmDelete} onCancel={cancelDelete} />
+      )}
+
+      {/* ── FIXED TOP SECTION ── */}
+      <div className="flex-shrink-0">
+        {/* Title */}
+        <h1 className="text-2xl font-bold mb-5" style={{ color: '#0F172A' }}>
+          Mis Movimientos
+        </h1>
+
+        {/* Stats cards */}
         <TransactionIndicators
           balance={stats.balance}
           income={stats.income}
           expense={stats.expense}
           savings={stats.savings}
         />
-      </div>
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2 border border-gray-300 rounded-lg px-4 py-2">
-          <Calendar className="w-4 h-4 text-gray-600" />
-          <span className="text-sm text-gray-700">
-            {new Date().toLocaleDateString('es-PE')}
-          </span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-8">
-        <div className="col-span-2">
-          <h2 className="text-xl font-bold text-slate-900 mb-4">Mis Movimientos</h2>
-          <TransactionTabs activeTab={activeTab} onTabChange={setActiveTab} />
-          <TransactionTable
-            transactions={getFilteredTransactions()}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
+        {/* Date range picker */}
+        <div className="mb-5">
+          <DateRangePicker
+            value={dateRange}
+            onChange={(range) => { setDateRange(range); setCurrentPage(1) }}
           />
         </div>
+      </div>
 
-        <div className="bg-white p-6 rounded-lg border border-gray-200 h-fit">
-          <h3 className="text-lg font-bold text-slate-900 mb-4">
-            Registro de Movimientos
-          </h3>
-          <p className="text-gray-500 text-sm">
-            Formulario de registro próximamente
-          </p>
+      {/* ── SCROLLABLE GRID (fills remaining screen height) ── */}
+      <div
+        className="grid flex-1 min-h-0 gap-8 pb-6"
+        style={{ gridTemplateColumns: '1fr 480px' }}
+      >
+        {/* ── LEFT: table column ── */}
+        <div className="flex flex-col min-h-0">
+          <h2 className="flex-shrink-0 text-base font-bold mb-4" style={{ color: '#0F172A' }}>
+            Mis Movimientos
+          </h2>
+
+          {/* Tabs */}
+          <div className="flex-shrink-0">
+            <TransactionTabs activeTab={activeTab} onTabChange={handleTabChange} />
+          </div>
+
+          {/* Table — scrollable area */}
+          <div className="flex-1 overflow-y-auto mt-5 min-h-0">
+            <TransactionTable
+              transactions={paginated}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          </div>
+
+          {/* Pagination — always visible, pinned at bottom of left column */}
+          <div className="flex-shrink-0 flex items-center justify-center gap-2 py-4">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40"
+              style={{ borderColor: '#E2E8F0', color: '#475569' }}
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Anterior
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                onClick={() => setCurrentPage(p)}
+                className="w-8 h-8 rounded-lg text-sm font-semibold border transition-colors"
+                style={{
+                  borderColor: currentPage === p ? '#3B82F6' : '#E2E8F0',
+                  background: currentPage === p ? '#3B82F6' : '#FFFFFF',
+                  color: currentPage === p ? '#FFFFFF' : '#475569',
+                }}
+              >
+                {p}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40"
+              style={{ borderColor: '#E2E8F0', color: '#475569' }}
+            >
+              Siguiente
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* ── RIGHT: Registro de Movimientos con scroll interno ── */}
+        <div className="min-h-0 overflow-y-auto pb-6" style={{ scrollbarWidth: 'thin', scrollbarColor: '#E2E8F0 transparent' }}>
+          <RegistroMovimientos
+            categories={categories}
+            onSuccess={fetchData}
+            editingTransaction={editingTransaction}
+            onEditCancel={handleEditCancel}
+          />
         </div>
       </div>
     </div>
   )
 }
+

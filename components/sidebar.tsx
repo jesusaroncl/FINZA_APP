@@ -5,7 +5,13 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { LogOut, Wallet, BarChart3, TrendingUp, Settings, HelpCircle } from 'lucide-react'
+import {
+  Wallet,
+  BarChart2,
+  TrendingUp,
+  Settings,
+  BookOpen,
+} from 'lucide-react'
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -19,81 +25,94 @@ export function Sidebar() {
 
   const navItems = [
     { icon: Wallet, label: 'Movimientos', href: '/movimientos' },
-    { icon: BarChart3, label: 'Dashboard', href: '/dashboard' },
+    { icon: BarChart2, label: 'Dashboard', href: '/dashboard' },
     { icon: TrendingUp, label: 'Proyección', href: '/proyeccion' },
   ]
 
   const bottomItems = [
     { icon: Settings, label: 'Configuración', href: '/settings' },
-    { icon: HelpCircle, label: 'Manual', href: '/help' },
+    { icon: BookOpen, label: 'Manual', href: '/help' },
   ]
 
   return (
-    <div className="w-56 bg-white border-r border-gray-200 flex flex-col h-screen">
+    <div
+      className="flex flex-col h-screen bg-white border-r border-gray-100"
+      style={{ width: '200px', minWidth: '200px' }}
+    >
       {/* Logo */}
-      <div className="p-6 border-b border-gray-200">
-        <Link href="/dashboard" className="flex items-center justify-center">
+      <div className="flex items-center justify-center py-8 px-4">
+        <Link href="/movimientos" className="block">
           <Image
             src="/logo.png"
             alt="Finza Logo"
-            width={40}
-            height={40}
-            className="rounded-lg"
+            width={72}
+            height={72}
+            className="rounded-2xl"
+            priority
           />
         </Link>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2">
+      {/* Main Navigation */}
+      <nav className="flex-1 px-3 pt-2 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon
-          const isActive = pathname === item.href
+          const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${
-                isActive
-                  ? 'bg-teal-50 text-teal-700'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`}
+              className="group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150"
+              style={{
+                color: isActive ? '#111827' : '#9CA3AF',
+                fontWeight: isActive ? '600' : '400',
+                background: isActive ? '#F3F4F6' : 'transparent',
+              }}
             >
-              <Icon size={20} />
-              <span className="font-medium">{item.label}</span>
+              {/* Active left indicator */}
+              {isActive && (
+                <span
+                  className="absolute left-0 h-8 w-[3px] rounded-r-full"
+                  style={{ background: '#111827' }}
+                  aria-hidden="true"
+                />
+              )}
+              <Icon
+                size={20}
+                strokeWidth={isActive ? 2 : 1.5}
+                style={{ color: isActive ? '#111827' : '#9CA3AF', flexShrink: 0 }}
+              />
+              <span className="text-sm tracking-wide">{item.label}</span>
             </Link>
           )
         })}
       </nav>
 
       {/* Bottom Items */}
-      <div className="border-t border-gray-200 p-4 space-y-2">
+      <div className="px-3 pb-6 space-y-1">
         {bottomItems.map((item) => {
           const Icon = item.icon
-          const isActive = pathname === item.href
+          const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition text-sm ${
-                isActive
-                  ? 'bg-teal-50 text-teal-700'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150"
+              style={{
+                color: isActive ? '#111827' : '#9CA3AF',
+                fontWeight: isActive ? '600' : '400',
+                background: isActive ? '#F3F4F6' : 'transparent',
+              }}
             >
-              <Icon size={18} />
-              <span className="font-medium">{item.label}</span>
+              <Icon
+                size={18}
+                strokeWidth={isActive ? 2 : 1.5}
+                style={{ color: isActive ? '#111827' : '#9CA3AF', flexShrink: 0 }}
+              />
+              <span className="text-sm tracking-wide">{item.label}</span>
             </Link>
           )
         })}
-
-        {/* Logout Button */}
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-red-50 hover:text-red-700 transition text-sm font-medium"
-        >
-          <LogOut size={18} />
-          <span>Cerrar Sesión</span>
-        </button>
       </div>
     </div>
   )

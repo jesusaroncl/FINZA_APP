@@ -15,10 +15,21 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-import { StatsCard, PeriodSelector } from '@/components/dashboard'
+import {
+  PeriodSelector,
+  BalanceCard,
+  ActivityChart,
+  ExpenseStats,
+  SavingsGoalCard,
+  UpcomingExpensesCard,
+  LargestTransactionsCard,
+  TotalSavingCard
+} from '@/components/dashboard'
 import { formatSoles } from '@/lib/utils-currency'
+import { DateRangePicker } from '@/components/date-range-picker'
+import type { DateRange } from '@/components/date-range-picker'
 
-type Period = 'week' | 'month' | 'year'
+type Period = 'week' | 'month' | 'year' | 'custom'
 
 interface Profile {
   first_name: string
@@ -59,15 +70,23 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPeriod, setSelectedPeriod] = useState<Period>('month')
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null })
+  const [savingsTarget, setSavingsTarget] = useState(20000)
+
+  // Load saved target from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('finza_savings_target')
+    if (saved) setSavingsTarget(Number(saved))
+  }, [])
 
   // Fetch data
   useEffect(() => {
     fetchDashboardData()
-  }, [selectedPeriod])
+  }, [selectedPeriod, dateRange])
 
   const fetchDashboardData = async () => {
     try {
-      setLoading(true)
+      if (!profile) setLoading(true)
       const { data: { user } } = await supabase.auth.getUser()
 
       if (!user) return
@@ -84,15 +103,24 @@ export default function DashboardPage() {
       }
 
       // Calculate date range based on period
-      const dateRange = getDateRange(selectedPeriod)
+      const effectiveRange = getDateRange(selectedPeriod, dateRange)
 
       // Fetch transactions
-      const { data: transactionsData } = await supabase
+      let query = supabase
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
-        .gte('transaction_date', dateRange.start.toISOString())
+        .gte('transaction_date', effectiveRange.start.toISOString())
         .order('transaction_date', { ascending: false })
+
+      if (effectiveRange.end) {
+        // Establecer a las 23:59:59 para incluir todo el día de fin
+        const endOfDay = new Date(effectiveRange.end)
+        endOfDay.setHours(23, 59, 59, 999)
+        query = query.lte('transaction_date', endOfDay.toISOString())
+      }
+
+      const { data: transactionsData } = await query
 
       if (transactionsData) {
         setTransactions(transactionsData)
@@ -105,7 +133,11 @@ export default function DashboardPage() {
   }
 
   // Utilities
-  const getDateRange = (period: Period) => {
+  const getDateRange = (period: Period, customRange?: DateRange) => {
+    if (period === 'custom' && customRange?.start) {
+      return { start: customRange.start, end: customRange.end || new Date() }
+    }
+
     const end = new Date()
     const start = new Date()
 
@@ -140,7 +172,7 @@ export default function DashboardPage() {
       balance: income - expense,
       income,
       expense,
-      savings: income * 0.2, // Estimate 20% savings
+      savings: Math.max(0, income - expense),
     }
   }
 
@@ -208,172 +240,83 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">
-          Hola, {profile?.first_name}!
-        </h1>
-      </div>
-
-      {/* Period Selector */}
-      <div className="mb-8 flex justify-between items-center">
-        <PeriodSelector
-          selectedPeriod={selectedPeriod}
-          onPeriodChange={setSelectedPeriod}
-        />
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-4 gap-6 mb-8">
-        <StatsCard
-          title="Balance"
-          amount={stats.balance}
-          icon="💰"
-          color="bg-gradient-to-br from-blue-500 to-blue-600"
-        />
-        <StatsCard
-          title="Ingresos"
-          amount={stats.income}
-          icon="📈"
-          color="bg-gradient-to-br from-green-500 to-green-600"
-        />
-        <StatsCard
-          title="Gastos"
-          amount={stats.expense}
-          icon="📉"
-          color="bg-gradient-to-br from-red-500 to-red-600"
-        />
-        <StatsCard
-          title="Ahorro"
-          amount={stats.savings}
-          icon="🎯"
-          color="bg-gradient-to-br from-purple-500 to-purple-600"
-        />
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-2 gap-8 mb-8">
-        {/* Activity Chart */}
-        <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Actividad Semanal
-          </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="ingresos" fill="#10b981" name="Ingresos" />
-              <Bar dataKey="gastos" fill="#ef4444" name="Gastos" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Category Distribution */}
-        <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Distribución por Categoría
-          </h3>
-          {categoryStats.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={categoryStats}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, value }) =>
-                    `${name}: ${formatSoles(value)}`
-                  }
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {categoryStats.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => formatSoles(value)} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-gray-500 text-center py-8">
-              Sin datos disponibles
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Recent Transactions */}
-      <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Transacciones Recientes
-        </h3>
-        {transactions.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Descripción
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Tipo
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Fecha
-                  </th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700">
-                    Monto
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.slice(0, 5).map((t) => (
-                  <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4 text-gray-900">{t.description}</td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-sm font-medium ${
-                          t.type === 'income'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {t.type === 'income' ? 'Ingreso' : 'Gasto'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-gray-600">
-                      {new Date(t.transaction_date).toLocaleDateString(
-                        'es-PE'
-                      )}
-                    </td>
-                    <td
-                      className={`py-3 px-4 text-right font-semibold ${
-                        t.type === 'income'
-                          ? 'text-green-600'
-                          : 'text-red-600'
-                      }`}
-                    >
-                      {t.type === 'income' ? '+' : '-'}
-                      {formatSoles(t.amount)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+    <div className="flex flex-col min-h-screen bg-[#F8FAFC] px-8 pt-7 pb-8">
+      <div className="w-full">
+        
+        {/* Top Header Row */}
+        <div className="flex justify-between items-start mb-8">
+          <h1 className="text-[32px] font-bold text-[#0F172A] tracking-tight">
+            Hola, {profile?.first_name || 'Usuario'}!
+          </h1>
+          
+          <div className="flex items-center gap-4 mt-2">
+            <PeriodSelector
+              selectedPeriod={selectedPeriod}
+              onPeriodChange={(p) => {
+                setSelectedPeriod(p)
+                setDateRange({ start: null, end: null })
+              }}
+            />
+            <div className="bg-white rounded-lg border border-slate-200">
+              <DateRangePicker
+                value={dateRange}
+                align="right"
+                onChange={(range) => {
+                  setDateRange(range)
+                  if (range.start || range.end) setSelectedPeriod('custom')
+                }}
+              />
+            </div>
           </div>
-        ) : (
-          <p className="text-gray-500 text-center py-8">
-            Sin transacciones disponibles
-          </p>
-        )}
+        </div>
+
+        {/* Main Grid */}
+        <div className="flex flex-col lg:flex-row gap-8">
+          
+          {/* Left Column (Main Content) - approx 65% */}
+          <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex items-center gap-6 mb-8 overflow-x-auto pb-2">
+              <TotalSavingCard savings={stats.savings || 0} />
+              <BalanceCard balance={stats.balance} />
+            </div>
+            
+            <h3 className="text-[17px] font-bold text-[#334155] mb-4">Actividad Semanal</h3>
+            <div className="mb-8">
+              <ActivityChart data={chartData} />
+            </div>
+
+            <h3 className="text-[17px] font-bold text-[#334155] mb-4">Estadística de Gastos</h3>
+            <div>
+              <ExpenseStats data={categoryStats} />
+            </div>
+          </div>
+
+          {/* Right Column (Sidebar) - approx 35% */}
+          <div className="w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 flex flex-col">
+            <h3 className="text-[17px] font-bold text-[#334155] mb-4">Meta de ahorro</h3>
+            <div className="mb-8">
+              <SavingsGoalCard 
+                target={savingsTarget} 
+                achieved={stats.savings} 
+                onSave={(newTarget) => {
+                  setSavingsTarget(newTarget)
+                  localStorage.setItem('finza_savings_target', newTarget.toString())
+                }}
+              />
+            </div>
+            
+            <h3 className="text-[17px] font-bold text-[#334155] mb-4">Próximos Gastos</h3>
+            <div className="mb-8">
+              <UpcomingExpensesCard />
+            </div>
+            
+            <h3 className="text-[17px] font-bold text-[#334155] mb-4">Movimientos Más grandes</h3>
+            <div>
+              <LargestTransactionsCard transactions={transactions} />
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   )
