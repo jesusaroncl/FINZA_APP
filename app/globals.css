@@ -123,3 +123,22 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom Scrollbar Styles */
+.scrollbar-clean::-webkit-scrollbar {
+  width: 5px;
+}
+.scrollbar-clean::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-clean::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+.scrollbar-clean::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
+}
+.scrollbar-clean {
+  scrollbar-width: thin;
+  scrollbar-color: #e2e8f0 transparent;
+}

@@ -69,12 +69,24 @@ export function LargestTransactionsCard({ transactions }: LargestTransactionsCar
               year: 'numeric'
             })
 
+            const isAuto = tx.description.endsWith('[AUTO]') || tx.description.endsWith('(Automático)')
+            const cleanDescription = tx.description.replace(' [AUTO]', '').replace(' (Automático)', '')
+
             return (
               <div key={tx.id} className="flex items-center gap-4">
-                {getTransactionIcon(tx.description, tx.type)}
+                {getTransactionIcon(cleanDescription, tx.type)}
                 
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-[#1E293B] truncate">{tx.description}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold text-[#1E293B] truncate">
+                      {cleanDescription}
+                    </p>
+                    {isAuto && (
+                      <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">
+                        Automático
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs font-medium text-[#94A3B8]">{dateString}</p>
                 </div>
 

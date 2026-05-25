@@ -57,8 +57,8 @@ export function ActivityChart({ data }: ActivityChartProps) {
             cursor={{ fill: '#F8FAFC' }}
             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
           />
-          <Bar dataKey="ingresos" fill="#1D4ED8" radius={[10, 10, 10, 10]} barSize={12} />
-          <Bar dataKey="gastos" fill="#4ECDC4" radius={[10, 10, 10, 10]} barSize={12} />
+          <Bar dataKey="ingresos" fill="#1D4ED8" radius={[10, 10, 10, 10]} barSize={12} isAnimationActive={true} animationBegin={200} animationDuration={1200} animationEasing="ease-out" />
+          <Bar dataKey="gastos" fill="#4ECDC4" radius={[10, 10, 10, 10]} barSize={12} isAnimationActive={true} animationBegin={400} animationDuration={1200} animationEasing="ease-out" />
         </BarChart>
       </ResponsiveContainer>
     </div>

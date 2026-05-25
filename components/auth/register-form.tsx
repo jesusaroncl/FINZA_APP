@@ -57,7 +57,7 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
     try {
       const supabase = createClient()
 
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -80,10 +80,28 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
         return
       }
 
+      // Si el registro fue exitoso y tenemos un usuario, insertamos en profiles
+      if (data?.user) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: data.user.id,
+            first_name: firstName,
+            last_name: lastName,
+            updated_at: new Date().toISOString()
+          })
+
+        if (profileError) {
+          console.error('Error insertando profile:', profileError)
+          // No bloqueamos el flujo si falla el perfil, pero se loggea.
+        }
+      }
+
       if (onSuccess) {
         onSuccess()
       } else {
-        router.push('/auth/register-success')
+        // Redirigir directamente al dashboard
+        router.push('/dashboard')
       }
     } catch (err) {
       setError('Error al registrarse. Intenta de nuevo.')

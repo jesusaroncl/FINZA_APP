@@ -92,6 +92,10 @@ export function SavingsGoalCard({ target, achieved, onSave }: SavingsGoalCardPro
                     dataKey="value"
                     stroke="none"
                     cornerRadius={10}
+                    isAnimationActive={true}
+                    animationBegin={200}
+                    animationDuration={1200}
+                    animationEasing="ease-out"
                   >
                     <Cell fill="#4ECDC4" />
                     <Cell fill="#F1F5F9" />

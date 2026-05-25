@@ -1,16 +1,29 @@
 import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, X } from 'lucide-react'
 import { formatSoles } from '@/lib/utils-currency'
+import { createClient } from '@/lib/supabase/client'
 
 interface FixedExpense {
   id: string
   name: string
   amount: number
+  category_id?: string
   frequency: 'semanal' | 'mensual' | 'anual'
-  startDate: string
+  start_date: string
 }
 
-export function UpcomingExpensesCard() {
+interface Category {
+  id: string
+  name: string
+  type: string
+}
+
+interface UpcomingExpensesCardProps {
+  categories?: Category[]
+}
+
+export function UpcomingExpensesCard({ categories = [] }: UpcomingExpensesCardProps) {
+  const supabase = createClient()
   const [expenses, setExpenses] = useState<FixedExpense[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -19,35 +32,25 @@ export function UpcomingExpensesCard() {
   const [newAmount, setNewAmount] = useState('')
   const [newFreq, setNewFreq] = useState<'semanal' | 'mensual' | 'anual'>('mensual')
   const [newDate, setNewDate] = useState('')
+  const [newCategory, setNewCategory] = useState('')
 
   useEffect(() => {
-    const saved = localStorage.getItem('finza_fixed_expenses')
-    if (saved) {
-      setExpenses(JSON.parse(saved))
-    } else {
-      // Default mock data if empty
-      setExpenses([
-        {
-          id: '1',
-          name: 'Figma - Mensual',
-          amount: 150,
-          frequency: 'mensual',
-          startDate: new Date(new Date().getFullYear(), 4, 15).toISOString() // May 15
-        },
-        {
-          id: '2',
-          name: 'Adobe - Anual',
-          amount: 559,
-          frequency: 'anual',
-          startDate: new Date(new Date().getFullYear(), 5, 16).toISOString() // Jun 16
-        }
-      ])
-    }
+    fetchExpenses()
   }, [])
 
-  const saveToStorage = (data: FixedExpense[]) => {
-    setExpenses(data)
-    localStorage.setItem('finza_fixed_expenses', JSON.stringify(data))
+  const fetchExpenses = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data } = await supabase
+      .from('recurring_expenses')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('start_date', { ascending: true })
+
+    if (data) {
+      setExpenses(data)
+    }
   }
 
   const openAddModal = () => {
@@ -56,6 +59,7 @@ export function UpcomingExpensesCard() {
     setNewAmount('')
     setNewFreq('mensual')
     setNewDate(new Date().toISOString().split('T')[0])
+    setNewCategory('')
     setIsModalOpen(true)
   }
 
@@ -64,35 +68,47 @@ export function UpcomingExpensesCard() {
     setNewName(expense.name)
     setNewAmount(expense.amount.toString())
     setNewFreq(expense.frequency)
-    const dateStr = expense.startDate || (expense as any).createdAt || new Date().toISOString()
+    const dateStr = expense.start_date || new Date().toISOString()
     setNewDate(dateStr.split('T')[0])
+    setNewCategory(expense.category_id || '')
     setIsModalOpen(true)
   }
 
-  const handleSave = () => {
-    if (!newName || !newAmount || !newDate) return
+  const handleSave = async () => {
+    if (!newName || !newAmount || !newDate || !newCategory) return
     const val = Number(newAmount)
     if (isNaN(val) || val <= 0) return
 
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
     if (editingId) {
       // Update existing
-      const updated = expenses.map(e => 
-        e.id === editingId 
-          ? { ...e, name: newName, amount: val, frequency: newFreq, startDate: new Date(newDate).toISOString() }
-          : e
-      )
-      saveToStorage(updated)
+      await supabase
+        .from('recurring_expenses')
+        .update({
+          name: newName,
+          amount: val,
+          frequency: newFreq,
+          start_date: newDate,
+          category_id: newCategory
+        })
+        .eq('id', editingId)
     } else {
       // Create new
-      const newExpense: FixedExpense = {
-        id: crypto.randomUUID(),
-        name: newName,
-        amount: val,
-        frequency: newFreq,
-        startDate: new Date(newDate).toISOString()
-      }
-      saveToStorage([newExpense, ...expenses])
+      await supabase
+        .from('recurring_expenses')
+        .insert({
+          user_id: user.id,
+          name: newName,
+          amount: val,
+          frequency: newFreq,
+          start_date: newDate,
+          category_id: newCategory
+        })
     }
+    
+    await fetchExpenses()
     
     setIsModalOpen(false)
     setEditingId(null)
@@ -100,10 +116,12 @@ export function UpcomingExpensesCard() {
     setNewAmount('')
     setNewFreq('mensual')
     setNewDate('')
+    setNewCategory('')
   }
 
-  const handleDelete = (id: string) => {
-    saveToStorage(expenses.filter(e => e.id !== id))
+  const handleDelete = async (id: string) => {
+    await supabase.from('recurring_expenses').delete().eq('id', id)
+    await fetchExpenses()
   }
 
   return (
@@ -124,7 +142,7 @@ export function UpcomingExpensesCard() {
           ) : (
             expenses.map((expense) => {
               // Convert stored ISO string to local Date object correctly avoiding timezone shifts
-              const dateStr = expense.startDate || (expense as any).createdAt || new Date().toISOString()
+              const dateStr = expense.start_date || new Date().toISOString()
               const [yearStr, monthStr, dayStr] = dateStr.split('T')[0].split('-')
               const date = new Date(Number(yearStr), Number(monthStr) - 1, Number(dayStr))
               
@@ -212,6 +230,18 @@ export function UpcomingExpensesCard() {
                 onChange={(e) => setNewDate(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-[#0F172A]"
               />
+              <select
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-[#0F172A] bg-white"
+              >
+                <option value="" disabled>Selecciona una categoría</option>
+                {categories.filter(c => c.type === 'expense').map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="flex items-center gap-6 mb-8 px-1">

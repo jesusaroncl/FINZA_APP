@@ -29,7 +29,7 @@ export function RegistroMovimientos({
   editingTransaction,
   onEditCancel,
 }: RegistroMovimientosProps) {
-  const [mode, setMode] = useState<'income' | 'expense'>('income')
+  const [mode, setMode] = useState<'income' | 'expense'>('expense')
   const [display, setDisplay] = useState('')
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -64,7 +64,7 @@ export function RegistroMovimientos({
     }
   }, [editingTransaction, categories])
 
-  const filteredCategories = categories.filter((c) => c.type === mode)
+  const filteredCategories = categories
 
   const rawAmount = parseFloat(display) || 0
 
@@ -88,7 +88,7 @@ export function RegistroMovimientos({
   const handleCancel = () => {
     setDisplay(''); setDescription(''); setCategoryId('')
     setDate(new Date().toISOString().split('T')[0])
-    setMode('income'); setCuotas(1); setInteresTipo('Sin Intereses'); setInteresTasa(0)
+    setMode('expense'); setCuotas(1); setInteresTipo('Sin Intereses'); setInteresTasa(0)
     onEditCancel?.()
   }
 

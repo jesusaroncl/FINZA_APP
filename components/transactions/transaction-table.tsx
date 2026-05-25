@@ -62,11 +62,11 @@ export function TransactionTable({ transactions, onEdit, onDelete }: Transaction
       <table className="w-full">
         <thead>
           <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
-            <th className="px-5 py-4 text-left text-xs font-semibold" style={{ color: '#3B82F6' }}>Description</th>
+            <th className="px-5 py-4 text-left text-xs font-semibold" style={{ color: '#3B82F6' }}>Descripción</th>
             <th className="px-4 py-4 text-left text-xs font-semibold" style={{ color: '#3B82F6' }}>Acciones</th>
-            <th className="px-4 py-4 text-left text-xs font-semibold" style={{ color: '#3B82F6' }}>Type</th>
-            <th className="px-4 py-4 text-left text-xs font-semibold" style={{ color: '#3B82F6' }}>Date</th>
-            <th className="px-5 py-4 text-right text-xs font-semibold" style={{ color: '#F97316' }}>Amount</th>
+            <th className="px-4 py-4 text-left text-xs font-semibold" style={{ color: '#3B82F6' }}>Categoría</th>
+            <th className="px-4 py-4 text-left text-xs font-semibold" style={{ color: '#3B82F6' }}>Fecha</th>
+            <th className="px-5 py-4 text-right text-xs font-semibold" style={{ color: '#F97316' }}>Monto</th>
           </tr>
         </thead>
         <tbody>
@@ -84,9 +84,16 @@ export function TransactionTable({ transactions, onEdit, onDelete }: Transaction
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-3">
                     <TransactionTypeIcon type={tx.type} />
-                    <span className="text-sm font-medium" style={{ color: '#1E293B' }}>
-                      {tx.description}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium" style={{ color: '#1E293B' }}>
+                        {tx.description.replace(' [AUTO]', '').replace(' (Automático)', '')}
+                      </span>
+                      {(tx.description.endsWith('[AUTO]') || tx.description.endsWith('(Automático)')) && (
+                        <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">
+                          Automático
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </td>
 
@@ -110,13 +117,12 @@ export function TransactionTable({ transactions, onEdit, onDelete }: Transaction
                 {/* Date */}
                 <td className="px-4 py-3.5 text-sm" style={{ color: '#64748B' }}>
                   {(() => {
-                    // Ahora que la base de datos es timestamptz, tx.date contiene
-                    // la fecha y hora exactas con su zona horaria.
                     const d = new Date(tx.date)
-                    return d.toLocaleDateString('es-PE', {
-                      day: '2-digit', month: 'short',
-                      hour: '2-digit', minute: '2-digit', hour12: true,
-                    })
+                    const day = d.getDate().toString().padStart(2, '0')
+                    let month = d.toLocaleString('es-PE', { month: 'short' }).replace(/\./g, '')
+                    month = month.charAt(0).toUpperCase() + month.slice(1)
+                    const time = d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })
+                    return `${day} ${month}, ${time}`
                   })()}
                 </td>
 

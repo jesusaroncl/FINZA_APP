@@ -54,12 +54,6 @@ export default function MovimientosPage() {
     today.setHours(0, 0, 0, 0)
     return { start: today, end: today }
   })
-  const [stats, setStats] = useState<TransactionStats>({
-    balance: 0,
-    income: 0,
-    expense: 0,
-    savings: 0,
-  })
 
   const supabase = createClient()
 
@@ -97,7 +91,6 @@ export default function MovimientosPage() {
 
       if (txData) {
         setTransactions(txData)
-        setStats(calculateStats(txData))
       }
       if (catData) setCategories(catData)
     } catch (error) {
@@ -123,7 +116,6 @@ export default function MovimientosPage() {
     if (!error) {
       const updated = transactions.filter((t) => t.id !== deletingId)
       setTransactions(updated)
-      setStats(calculateStats(updated))
     }
     setDeletingId(null)
   }
@@ -146,23 +138,30 @@ export default function MovimientosPage() {
     return cat?.name ?? 'Sin categoría'
   }
 
-  // Filtered by tab + date range
-  const filtered = transactions
+  // Filtered by date range
+  const dateFiltered = transactions.filter((t) => {
+    if (dateRange.start || dateRange.end) {
+      const [y, m, d] = t.transaction_date.split('T')[0].split('-').map(Number)
+      const txDate = new Date(y, m - 1, d)
+      const rangeStart = dateRange.start && dateRange.end
+        ? (dateRange.start < dateRange.end ? dateRange.start : dateRange.end)
+        : dateRange.start
+      const rangeEnd = dateRange.start && dateRange.end
+        ? (dateRange.start < dateRange.end ? dateRange.end : dateRange.start)
+        : dateRange.end
+      if (rangeStart) { const s = new Date(rangeStart); s.setHours(0,0,0,0); if (txDate < s) return false }
+      if (rangeEnd) { const e = new Date(rangeEnd); e.setHours(23,59,59,999); if (txDate > e) return false }
+    }
+    return true
+  })
+
+  // Calculate stats based purely on date range (ignoring tabs)
+  const currentStats = calculateStats(dateFiltered)
+
+  // Filtered by tab for the table
+  const filtered = dateFiltered
     .filter((t) => {
       if (activeTab !== 'all' && t.type !== activeTab) return false
-      if (dateRange.start || dateRange.end) {
-        // Extraemos solo YYYY-MM-DD y lo forzamos a medianoche local
-        const [y, m, d] = t.transaction_date.split('T')[0].split('-').map(Number)
-        const txDate = new Date(y, m - 1, d)
-        const rangeStart = dateRange.start && dateRange.end
-          ? (dateRange.start < dateRange.end ? dateRange.start : dateRange.end)
-          : dateRange.start
-        const rangeEnd = dateRange.start && dateRange.end
-          ? (dateRange.start < dateRange.end ? dateRange.end : dateRange.start)
-          : dateRange.end
-        if (rangeStart) { const s = new Date(rangeStart); s.setHours(0,0,0,0); if (txDate < s) return false }
-        if (rangeEnd) { const e = new Date(rangeEnd); e.setHours(23,59,59,999); if (txDate > e) return false }
-      }
       return true
     })
     .map((t) => ({
@@ -191,14 +190,8 @@ export default function MovimientosPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full min-h-[60vh]">
-        <div className="flex flex-col items-center gap-3">
-          <div
-            className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-            style={{ borderColor: '#3B82F6', borderTopColor: 'transparent' }}
-          />
-          <p className="text-sm" style={{ color: '#94A3B8' }}>Cargando transacciones...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-[#F8FAFC]">
+        <div className="w-8 h-8 rounded-full border-2 border-t-transparent border-[#1D4ED8] animate-spin" />
       </div>
     )
   }
@@ -222,10 +215,10 @@ export default function MovimientosPage() {
 
         {/* Stats cards */}
         <TransactionIndicators
-          balance={stats.balance}
-          income={stats.income}
-          expense={stats.expense}
-          savings={stats.savings}
+          balance={currentStats.balance}
+          income={currentStats.income}
+          expense={currentStats.expense}
+          savings={currentStats.savings}
         />
 
         {/* Date range picker */}
@@ -302,7 +295,7 @@ export default function MovimientosPage() {
         </div>
 
         {/* ── RIGHT: Registro de Movimientos con scroll interno ── */}
-        <div className="min-h-0 overflow-y-auto pb-6" style={{ scrollbarWidth: 'thin', scrollbarColor: '#E2E8F0 transparent' }}>
+        <div className="min-h-0 overflow-y-auto pr-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           <RegistroMovimientos
             categories={categories}
             onSuccess={fetchData}

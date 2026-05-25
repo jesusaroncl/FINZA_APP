@@ -28,6 +28,7 @@ import {
 import { formatSoles } from '@/lib/utils-currency'
 import { DateRangePicker } from '@/components/date-range-picker'
 import type { DateRange } from '@/components/date-range-picker'
+import { processRecurringExpenses } from '@/lib/process-recurring-expenses'
 
 type Period = 'week' | 'month' | 'year' | 'custom'
 
@@ -57,9 +58,19 @@ interface ChartData {
   gastos: number
 }
 
+interface Category {
+  id: string
+  name: string
+  type: 'income' | 'expense'
+  color: string
+  icon?: string
+}
+
 interface CategoryStats {
   name: string
   value: number
+  color: string
+  icon?: string
 }
 
 export default function DashboardPage() {
@@ -68,6 +79,7 @@ export default function DashboardPage() {
   // State
   const [profile, setProfile] = useState<Profile | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPeriod, setSelectedPeriod] = useState<Period>('month')
   const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null })
@@ -102,6 +114,9 @@ export default function DashboardPage() {
         setProfile(profileData)
       }
 
+      // Procesar gastos recurrentes antes de cargar las transacciones
+      await processRecurringExpenses(supabase, user.id)
+
       // Calculate date range based on period
       const effectiveRange = getDateRange(selectedPeriod, dateRange)
 
@@ -120,10 +135,16 @@ export default function DashboardPage() {
         query = query.lte('transaction_date', endOfDay.toISOString())
       }
 
-      const { data: transactionsData } = await query
+      const [transactionsRes, categoriesRes] = await Promise.all([
+        query,
+        supabase.from('categories').select('*').eq('user_id', user.id)
+      ])
 
-      if (transactionsData) {
-        setTransactions(transactionsData)
+      if (transactionsRes.data) {
+        setTransactions(transactionsRes.data)
+      }
+      if (categoriesRes.data) {
+        setCategories(categoriesRes.data)
       }
     } catch (error) {
       console.error('[v0] Error fetching dashboard data:', error)
@@ -203,19 +224,28 @@ export default function DashboardPage() {
   }
 
   const getCategoryStats = (): CategoryStats[] => {
-    const categories: Record<string, number> = {}
+    const stats: Record<string, { value: number; name: string; color: string; icon?: string }> = {}
+
+    // Inicializar todas las categorías de tipo gasto en 0
+    categories.filter(c => c.type === 'expense').forEach((cat) => {
+      stats[cat.name] = { value: 0, name: cat.name, color: cat.color || '#94A3B8', icon: cat.icon }
+    })
 
     transactions
       .filter((t) => t.type === 'expense')
-      .forEach((t) => {
-        const category = t.description.split(' ')[0]
-        categories[category] = (categories[category] || 0) + t.amount
+      .forEach((t: any) => {
+        const cat = categories.find((c) => c.id === t.category_id)
+        const name = cat?.name || 'Sin categoría'
+        const color = cat?.color || '#94A3B8'
+        const icon = cat?.icon
+        
+        if (!stats[name]) {
+          stats[name] = { value: 0, name, color, icon }
+        }
+        stats[name].value += t.amount
       })
 
-    return Object.entries(categories).map(([name, value]) => ({
-      name,
-      value,
-    }))
+    return Object.values(stats)
   }
 
   const stats = calculateStats()
@@ -233,8 +263,8 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-gray-600">Cargando...</p>
+      <div className="flex items-center justify-center min-h-screen bg-[#F8FAFC]">
+        <div className="w-8 h-8 rounded-full border-2 border-t-transparent border-[#1D4ED8] animate-spin" />
       </div>
     )
   }
@@ -287,7 +317,7 @@ export default function DashboardPage() {
 
             <h3 className="text-[17px] font-bold text-[#334155] mb-4">Estadística de Gastos</h3>
             <div>
-              <ExpenseStats data={categoryStats} />
+              <ExpenseStats data={categoryStats} onCategoryAdded={fetchDashboardData} />
             </div>
           </div>
 
@@ -307,7 +337,7 @@ export default function DashboardPage() {
             
             <h3 className="text-[17px] font-bold text-[#334155] mb-4">Próximos Gastos</h3>
             <div className="mb-8">
-              <UpcomingExpensesCard />
+              <UpcomingExpensesCard categories={categories} />
             </div>
             
             <h3 className="text-[17px] font-bold text-[#334155] mb-4">Movimientos Más grandes</h3>

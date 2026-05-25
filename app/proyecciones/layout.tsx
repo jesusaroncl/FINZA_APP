@@ -2,7 +2,7 @@ import { Sidebar } from '@/components/sidebar'
 
 export const dynamic = 'force-dynamic'
 
-export default function ProyeccionLayout({
+export default function ProyeccionesLayout({
   children,
 }: {
   children: React.ReactNode
