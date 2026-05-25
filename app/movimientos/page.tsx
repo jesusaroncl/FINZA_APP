@@ -170,7 +170,6 @@ export default function MovimientosPage() {
       type: t.type,
       category: getCategoryName(t.category_id),
       date: t.transaction_date,
-      created_at: t.created_at,
       amount: t.amount,
       cuotas: t.cuotas,
       interes_tipo: t.interes_tipo,

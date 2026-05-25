@@ -2,7 +2,7 @@
 
 import { Calendar } from 'lucide-react'
 
-type Period = 'week' | 'month' | 'year'
+export type Period = 'week' | 'month' | 'year' | 'custom'
 
 interface PeriodSelectorProps {
   selectedPeriod: Period
