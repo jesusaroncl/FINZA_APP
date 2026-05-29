@@ -57,12 +57,6 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Redirigir de la raíz (/) a login o dashboard
-  if (request.nextUrl.pathname === '/') {
-    const url = request.nextUrl.clone()
-    url.pathname = user ? '/dashboard' : '/auth/login'
-    return NextResponse.redirect(url)
-  }
 
   return supabaseResponse
 }
