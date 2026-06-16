@@ -16,7 +16,7 @@ def build_expense_df(transactions: list[dict], categories: list[dict]) -> pd.Dat
         return pd.DataFrame()
 
     df = pd.DataFrame(transactions)
-    df["transaction_date"] = pd.to_datetime(df["transaction_date"])
+    df["transaction_date"] = pd.to_datetime(df["transaction_date"], utc=True).dt.tz_localize(None)
     df = df[df["type"] == "expense"].copy()
 
     if df.empty:
@@ -57,7 +57,7 @@ def build_risk_features(transactions: list[dict], reference_date: datetime | Non
         return _zero_risk_features()
 
     df = pd.DataFrame(transactions)
-    df["transaction_date"] = pd.to_datetime(df["transaction_date"])
+    df["transaction_date"] = pd.to_datetime(df["transaction_date"], utc=True).dt.tz_localize(None)
 
     expenses = df[df["type"] == "expense"].copy()
     income_df = df[df["type"] == "income"].copy()
@@ -124,7 +124,7 @@ def build_risk_training_data(transactions: list[dict]) -> tuple[pd.DataFrame, pd
         return pd.DataFrame(), pd.DataFrame()
 
     df = pd.DataFrame(transactions)
-    df["transaction_date"] = pd.to_datetime(df["transaction_date"])
+    df["transaction_date"] = pd.to_datetime(df["transaction_date"], utc=True).dt.tz_localize(None)
     df = df.sort_values("transaction_date")
 
     min_date = df["transaction_date"].min().to_pydatetime()
