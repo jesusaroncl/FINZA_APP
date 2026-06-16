@@ -255,42 +255,65 @@ export default function MovimientosPage() {
           </div>
 
           {/* Pagination — always visible, pinned at bottom of left column */}
-          <div className="flex-shrink-0 flex items-center justify-center gap-2 py-4">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40"
-              style={{ borderColor: '#E2E8F0', color: '#475569' }}
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Anterior
-            </button>
-
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+          {totalPages > 1 && (
+            <div className="flex-shrink-0 flex items-center justify-center gap-1.5 py-4">
               <button
-                key={p}
-                onClick={() => setCurrentPage(p)}
-                className="w-8 h-8 rounded-lg text-sm font-semibold border transition-colors"
-                style={{
-                  borderColor: currentPage === p ? '#3B82F6' : '#E2E8F0',
-                  background: currentPage === p ? '#3B82F6' : '#FFFFFF',
-                  color: currentPage === p ? '#FFFFFF' : '#475569',
-                }}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40"
+                style={{ borderColor: '#E2E8F0', color: '#475569' }}
               >
-                {p}
+                <ChevronLeft className="w-4 h-4" />
+                Anterior
               </button>
-            ))}
 
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40"
-              style={{ borderColor: '#E2E8F0', color: '#475569' }}
-            >
-              Siguiente
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+              {(() => {
+                const pages: (number | 'ellipsis')[] = []
+                const delta = 2
+                const left = currentPage - delta
+                const right = currentPage + delta
+
+                for (let p = 1; p <= totalPages; p++) {
+                  if (p === 1 || p === totalPages || (p >= left && p <= right)) {
+                    pages.push(p)
+                  } else if (pages[pages.length - 1] !== 'ellipsis') {
+                    pages.push('ellipsis')
+                  }
+                }
+
+                return pages.map((p, i) =>
+                  p === 'ellipsis' ? (
+                    <span key={`e-${i}`} className="w-8 text-center text-sm" style={{ color: '#94A3B8' }}>
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setCurrentPage(p)}
+                      className="w-8 h-8 rounded-lg text-sm font-semibold border transition-colors"
+                      style={{
+                        borderColor: currentPage === p ? '#3B82F6' : '#E2E8F0',
+                        background: currentPage === p ? '#3B82F6' : '#FFFFFF',
+                        color: currentPage === p ? '#FFFFFF' : '#475569',
+                      }}
+                    >
+                      {p}
+                    </button>
+                  )
+                )
+              })()}
+
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40"
+                style={{ borderColor: '#E2E8F0', color: '#475569' }}
+              >
+                Siguiente
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── RIGHT: Registro de Movimientos con scroll interno ── */}
