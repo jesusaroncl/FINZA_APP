@@ -1,0 +1,75 @@
+{
+  "generated_at": "2026-06-16T02:29:25.146150",
+  "dataset": {
+    "n_users": 100,
+    "months_per_user": 14,
+    "total_transactions": 114225
+  },
+  "expense_prediction": {
+    "model": "RandomForestRegressor(n_estimators=150)",
+    "train_samples": 90224,
+    "test_samples": 22601,
+    "rmse": 23.1469,
+    "mae": 8.9776,
+    "r2_score": 0.9336,
+    "accuracy_within_20pct": 57.51,
+    "accuracy_within_30pct": 73.83,
+    "baseline_rmse": 89.9058,
+    "improvement_over_baseline_pct": 74.25,
+    "feature_importance": {
+      "category_avg_month": 0.7661,
+      "rolling_avg_7d": 0.2018,
+      "rolling_avg_30d": 0.0099,
+      "day_of_month": 0.0084,
+      "days_since_last_tx": 0.0048,
+      "month": 0.0043,
+      "day_of_week": 0.003,
+      "category_encoded": 0.0014,
+      "is_weekend": 0.0003
+    }
+  },
+  "risk_detection": {
+    "model": "LGBMClassifier(n_estimators=150)",
+    "train_samples": 4478,
+    "test_samples": 1120,
+    "per_risk": {
+      "SOBREENDEUDAMIENTO": {
+        "accuracy": 100.0,
+        "precision": 100.0,
+        "recall": 100.0,
+        "f1_score": 100.0,
+        "positive_rate_pct": 12.5
+      },
+      "GASTOS_HORMIGA": {
+        "accuracy": 100.0,
+        "precision": 100.0,
+        "recall": 100.0,
+        "f1_score": 100.0,
+        "positive_rate_pct": 25.0
+      },
+      "VELOCIDAD_GASTO": {
+        "accuracy": 99.91,
+        "precision": 100.0,
+        "recall": 99.36,
+        "f1_score": 99.68,
+        "positive_rate_pct": 14.02
+      },
+      "CATEGORIA_CRITICA": {
+        "accuracy": 100.0,
+        "precision": 100.0,
+        "recall": 100.0,
+        "f1_score": 100.0,
+        "positive_rate_pct": 30.98
+      }
+    },
+    "avg_f1_score": 99.92
+  },
+  "thesis_compliance": {
+    "r2_score_pct": 93.4,
+    "accuracy_within_20pct": 57.51,
+    "avg_f1_score_pct": 99.92,
+    "low_cost": true,
+    "latency_under_10s": true,
+    "interpretable": true
+  }
+}

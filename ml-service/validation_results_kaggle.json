@@ -1,0 +1,76 @@
+{
+  "generated_at": "2026-06-16T02:15:01.608555",
+  "dataset": {
+    "source": "kaggle:miadul/personal-finance-ml-dataset",
+    "rows": 32424,
+    "unique_users": 32424
+  },
+  "expense_prediction": {
+    "model": "RandomForestRegressor(n_estimators=150)",
+    "task": "Predecir gasto mensual desde variables financieras del usuario",
+    "train_samples": 25939,
+    "test_samples": 6485,
+    "rmse": 800.7476,
+    "mae": 611.8482,
+    "r2_score": 0.6611,
+    "accuracy_within_20pct": 42.17,
+    "accuracy_within_30pct": 64.86,
+    "baseline_rmse": 1375.427,
+    "improvement_over_baseline_pct": 41.78,
+    "feature_importance": {
+      "monthly_income_usd": 0.7417,
+      "credit_score": 0.0653,
+      "savings_to_income_ratio": 0.0626,
+      "net_income": 0.0403,
+      "month": 0.0317,
+      "loan_interest_rate_pct": 0.0164,
+      "loan_amount_usd": 0.0086,
+      "loan_load": 0.0085,
+      "loan_term_months": 0.0075,
+      "monthly_emi_usd": 0.0049,
+      "expense_budget": 0.0047,
+      "debt_burden": 0.0041,
+      "debt_to_income_ratio": 0.0036
+    }
+  },
+  "risk_detection": {
+    "model": "LGBMClassifier(n_estimators=150)",
+    "train_samples": 25939,
+    "test_samples": 6485,
+    "per_risk": {
+      "SOBREENDEUDAMIENTO": {
+        "accuracy": 100.0,
+        "precision": 100.0,
+        "recall": 100.0,
+        "f1_score": 100.0,
+        "positive_rate_pct": 34.48
+      },
+      "GASTO_ELEVADO": {
+        "accuracy": 99.83,
+        "precision": 99.81,
+        "recall": 99.15,
+        "f1_score": 99.48,
+        "positive_rate_pct": 16.42
+      },
+      "AHORRO_CRITICO": {
+        "note": "muy pocas muestras positivas"
+      },
+      "CREDITO_RIESGO": {
+        "accuracy": 100.0,
+        "precision": 100.0,
+        "recall": 100.0,
+        "f1_score": 100.0,
+        "positive_rate_pct": 37.24
+      }
+    },
+    "avg_f1_score": 99.83
+  },
+  "thesis_compliance": {
+    "r2_score_pct": 66.1,
+    "accuracy_within_20pct": 42.17,
+    "avg_f1_score_pct": 99.83,
+    "low_cost": true,
+    "latency_under_10s": true,
+    "interpretable": true
+  }
+}
