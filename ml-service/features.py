@@ -47,8 +47,12 @@ def build_expense_df(transactions: list[dict], categories: list[dict]) -> pd.Dat
     return df
 
 
-def build_risk_features(transactions: list[dict]) -> dict:
-    """Scalar features for a transaction window used by LightGBM risk model."""
+def build_risk_features(transactions: list[dict], reference_date: datetime | None = None) -> dict:
+    """Scalar features for a transaction window used by LightGBM risk model.
+
+    reference_date: the point-in-time to compute 'now' features from.
+    Defaults to datetime.now() for live inference; pass window end date for training.
+    """
     if not transactions:
         return _zero_risk_features()
 
@@ -58,7 +62,7 @@ def build_risk_features(transactions: list[dict]) -> dict:
     expenses = df[df["type"] == "expense"].copy()
     income_df = df[df["type"] == "income"].copy()
 
-    now = datetime.now()
+    now = reference_date if reference_date is not None else datetime.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     week_ago = now - timedelta(days=7)
 
@@ -142,7 +146,7 @@ def build_risk_training_data(transactions: list[dict]) -> tuple[pd.DataFrame, pd
             current += step
             continue
 
-        feats = build_risk_features(window_txs)
+        feats = build_risk_features(window_txs, reference_date=current)
         feats["window_end_day"] = float(current.day)
 
         labels = {

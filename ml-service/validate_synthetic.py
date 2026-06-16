@@ -82,25 +82,27 @@ def generate_user_transactions(
         })
         tx_id += 1
 
-        # Cuota de deuda (para SOBREENDEUDAMIENTO)
+        # Cuota de deuda (para SOBREENDEUDAMIENTO: cuotas > 30% del ingreso)
         if has_debt:
-            debt_amount = monthly_income * 0.15
-            txs.append({
-                "id": f"D{tx_id}", "user_id": user_id,
-                "amount": round(debt_amount, 2),
-                "type": "expense", "category_id": 8,
-                "transaction_date": (income_date + timedelta(days=2)).strftime("%Y-%m-%d"),
-                "cuotas": 12, "monto_por_cuota": round(debt_amount, 2),
-            })
-            tx_id += 1
+            # Dos cuotas: préstamo personal + tarjeta → total ~38% del ingreso
+            for loan_pct in (0.22, 0.18):
+                debt_amount = monthly_income * loan_pct
+                txs.append({
+                    "id": f"D{tx_id}", "user_id": user_id,
+                    "amount": round(debt_amount, 2),
+                    "type": "expense", "category_id": 8,
+                    "transaction_date": (income_date + timedelta(days=2)).strftime("%Y-%m-%d"),
+                    "cuotas": 12, "monto_por_cuota": round(debt_amount, 2),
+                })
+                tx_id += 1
 
         for cat_id, (mu, sigma, n_avg) in CAT_PATTERNS.items():
             n = max(0, int(rng.poisson(n_avg)))
             amt_mu = mu
 
-            # Gastos hormiga: muchas micro-transacciones < S/15
+            # Gastos hormiga: 40-60 micro-tx/mes → ~10-14 en cualquier ventana de 7 días
             if ant_expenses and cat_id in (1, 2):
-                n += int(rng.randint(8, 18))
+                n += int(rng.randint(40, 60))
                 amt_mu = min(mu, 10.0)
 
             # Categoría dominante: alimentación supera el 50% del gasto
@@ -303,8 +305,7 @@ def main():
     print(f"    Mejora vs baseline: {pred.get('improvement_over_baseline_pct')}%")
     print(f"\n    Top features:")
     for feat, imp in list(pred.get("feature_importance", {}).items())[:5]:
-        bar = "█" * int(imp * 40)
-        print(f"      {feat:<25} {bar} {round(imp*100,1)}%")
+        print(f"      {feat:<25} {round(imp*100,1)}%")
 
     print(f"\n  Detección de Riesgos — LightGBM Classifier")
     print(f"    Train samples     : {risk.get('train_samples')}")
