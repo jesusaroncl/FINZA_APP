@@ -37,8 +37,7 @@ def _build_tips(transactions: list[dict], categories: list[dict]) -> list[dict]:
         return []
 
     df = pd.DataFrame(transactions)
-    # Use pd.to_datetime directly — handles both string and datetime inputs
-    df["transaction_date"] = pd.to_datetime(df["transaction_date"])
+    df["transaction_date"] = pd.to_datetime(df["transaction_date"], utc=True).dt.tz_localize(None)
     expenses = df[df["type"] == "expense"].copy()
 
     if expenses.empty:
