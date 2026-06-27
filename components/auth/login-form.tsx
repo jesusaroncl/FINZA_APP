@@ -59,7 +59,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       <div className="space-y-3">
         <AuthInput
           type="email"
-          placeholder="sebas2104@gmail.com"
+          placeholder="ejemplo@gmail.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required

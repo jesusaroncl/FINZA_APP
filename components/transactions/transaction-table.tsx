@@ -23,19 +23,21 @@ interface TransactionTableProps {
   onDelete: (id: string) => void
 }
 
-function TransactionTypeIcon({ type }: { type: 'income' | 'expense' }) {
+function TransactionTypeIcon({ type, isAhorro }: { type: 'income' | 'expense'; isAhorro: boolean }) {
   const isIncome = type === 'income'
+  const bg = isAhorro ? '#FFFBEB' : isIncome ? '#F0FDF4' : '#FFF1F2'
+  const color = isAhorro ? '#F59E0B' : isIncome ? '#22C55E' : '#EF4444'
+  const border = isAhorro ? '#FDE68A' : isIncome ? '#BBF7D0' : '#FECDD3'
   return (
     <div
       className="flex items-center justify-center rounded-full flex-shrink-0"
-      style={{
-        width: 30, height: 30,
-        background: isIncome ? '#F0FDF4' : '#FFF1F2',
-        color: isIncome ? '#22C55E' : '#EF4444',
-        border: `1.5px solid ${isIncome ? '#BBF7D0' : '#FECDD3'}`,
-      }}
+      style={{ width: 30, height: 30, background: bg, color, border: `1.5px solid ${border}` }}
     >
-      {isIncome ? (
+      {isAhorro ? (
+        <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 3v10M5 6l3-3 3 3M4 13h8" />
+        </svg>
+      ) : isIncome ? (
         <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M8 12V4M4 8l4-4 4 4" />
         </svg>
@@ -73,17 +75,19 @@ export function TransactionTable({ transactions, onEdit, onDelete }: Transaction
           {transactions.map((tx, i) => {
             const hasCuotas = tx.type === 'expense' && tx.cuotas && tx.cuotas > 1
             const hasInteres = tx.type === 'expense' && tx.interes_tipo && tx.interes_tipo !== 'Sin Intereses'
+            const isAhorro = tx.category === 'Ahorro'
+            const isFuture = tx.date.split('T')[0] > new Date().toISOString().split('T')[0]
 
             return (
               <tr
                 key={tx.id}
                 className="hover:bg-slate-50 transition-colors"
-                style={{ borderBottom: i < transactions.length - 1 ? '1px solid #F8FAFC' : 'none' }}
+                style={{ borderBottom: i < transactions.length - 1 ? '1px solid #F8FAFC' : 'none', opacity: isFuture ? 0.55 : 1 }}
               >
                 {/* Description */}
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-3">
-                    <TransactionTypeIcon type={tx.type} />
+                    <TransactionTypeIcon type={tx.type} isAhorro={isAhorro} />
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium" style={{ color: '#1E293B' }}>
                         {tx.description.replace(' [AUTO]', '').replace(' (Automático)', '')}
@@ -91,6 +95,11 @@ export function TransactionTable({ transactions, onEdit, onDelete }: Transaction
                       {(tx.description.endsWith('[AUTO]') || tx.description.endsWith('(Automático)')) && (
                         <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">
                           Automático
+                        </span>
+                      )}
+                      {isFuture && (
+                        <span className="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">
+                          Próximo
                         </span>
                       )}
                     </div>
@@ -117,12 +126,16 @@ export function TransactionTable({ transactions, onEdit, onDelete }: Transaction
                 {/* Date */}
                 <td className="px-4 py-3.5 text-sm" style={{ color: '#64748B' }}>
                   {(() => {
-                    const d = new Date(tx.date)
-                    const day = d.getDate().toString().padStart(2, '0')
-                    let month = d.toLocaleString('es-PE', { month: 'short' }).replace(/\./g, '')
+                    const [datePart, timePart] = tx.date.split('T')
+                    const [ty, tm, td] = datePart.split('-').map(Number)
+                    const day = String(td).padStart(2, '0')
+                    let month = new Date(ty, tm - 1, td).toLocaleString('es-PE', { month: 'short' }).replace(/\./g, '')
                     month = month.charAt(0).toUpperCase() + month.slice(1)
-                    const time = d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })
-                    return `${day} ${month}, ${time}`
+                    const [hStr, mStr] = (timePart ?? '00:00').slice(0, 5).split(':')
+                    const h24 = parseInt(hStr ?? '0')
+                    const ampm = h24 >= 12 ? 'PM' : 'AM'
+                    const h12 = String(h24 % 12 || 12).padStart(2, '0')
+                    return `${day} ${month}, ${h12}:${mStr} ${ampm}`
                   })()}
                 </td>
 
@@ -130,9 +143,9 @@ export function TransactionTable({ transactions, onEdit, onDelete }: Transaction
                 <td className="px-5 py-3.5 text-right">
                   <span
                     className="text-sm font-semibold"
-                    style={{ color: tx.type === 'income' ? '#22C55E' : '#EF4444' }}
+                    style={{ color: isAhorro ? '#F59E0B' : tx.type === 'income' ? '#22C55E' : '#EF4444' }}
                   >
-                    {tx.type === 'income' ? '+' : '-'}
+                    {isAhorro ? '↑' : tx.type === 'income' ? '+' : '-'}
                     {formatSoles(Math.abs(tx.amount))}
                   </span>
 

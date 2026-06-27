@@ -6,9 +6,10 @@ import { X, Trash2 } from 'lucide-react'
 interface DeleteConfirmModalProps {
   onConfirm: () => void
   onCancel: () => void
+  isCuotaSeries?: boolean
 }
 
-export function DeleteConfirmModal({ onConfirm, onCancel }: DeleteConfirmModalProps) {
+export function DeleteConfirmModal({ onConfirm, onCancel, isCuotaSeries }: DeleteConfirmModalProps) {
   // Cerrar con Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
@@ -46,9 +47,16 @@ export function DeleteConfirmModal({ onConfirm, onCancel }: DeleteConfirmModalPr
           >
             <Trash2 className="w-5 h-5" style={{ color: '#EF4444' }} />
           </div>
-          <h2 className="text-base font-semibold" style={{ color: '#0F172A' }}>
-            ¿Desea eliminar el movimiento?
-          </h2>
+          <div>
+            <h2 className="text-base font-semibold" style={{ color: '#0F172A' }}>
+              ¿Desea eliminar el movimiento?
+            </h2>
+            {isCuotaSeries && (
+              <p className="text-xs mt-1" style={{ color: '#EF4444' }}>
+                Esto eliminará todas las cuotas del plan.
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Actions */}
@@ -58,14 +66,14 @@ export function DeleteConfirmModal({ onConfirm, onCancel }: DeleteConfirmModalPr
             className="px-5 py-2 rounded-xl text-sm font-semibold border transition hover:bg-gray-50"
             style={{ borderColor: '#E2E8F0', color: '#475569' }}
           >
-            Cancel
+            Cancelar
           </button>
           <button
             onClick={onConfirm}
             className="px-5 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90"
             style={{ background: '#EF4444' }}
           >
-            Delete
+            Eliminar
           </button>
         </div>
       </div>

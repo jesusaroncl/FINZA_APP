@@ -23,12 +23,14 @@ import {
   SavingsGoalCard,
   UpcomingExpensesCard,
   LargestTransactionsCard,
-  TotalSavingCard
+  TotalSavingCard,
+  CuotasCard
 } from '@/components/dashboard'
 import { formatSoles } from '@/lib/utils-currency'
 import { DateRangePicker } from '@/components/date-range-picker'
 import type { DateRange } from '@/components/date-range-picker'
 import { processRecurringExpenses } from '@/lib/process-recurring-expenses'
+import { ensureDefaultCategories } from '@/lib/default-categories'
 
 type Period = 'week' | 'month' | 'year' | 'custom'
 
@@ -113,6 +115,8 @@ export default function DashboardPage() {
       if (profileData) {
         setProfile(profileData)
       }
+
+      await ensureDefaultCategories(supabase, user.id)
 
       // Procesar gastos recurrentes antes de cargar las transacciones
       await processRecurringExpenses(supabase, user.id)
@@ -340,6 +344,11 @@ export default function DashboardPage() {
               <UpcomingExpensesCard categories={categories} />
             </div>
             
+            <h3 className="text-[17px] font-bold text-[#334155] mb-4">Seguimiento de Cuotas</h3>
+            <div className="mb-8">
+              <CuotasCard />
+            </div>
+
             <h3 className="text-[17px] font-bold text-[#334155] mb-4">Movimientos Más grandes</h3>
             <div>
               <LargestTransactionsCard transactions={transactions} />

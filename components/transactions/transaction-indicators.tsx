@@ -7,6 +7,7 @@ interface TransactionIndicatorsProps {
   income: number
   expense: number
   savings: number
+  disponible: number
 }
 
 export function TransactionIndicators({
@@ -14,14 +15,20 @@ export function TransactionIndicators({
   income,
   expense,
   savings,
+  disponible,
 }: TransactionIndicatorsProps) {
+
   const indicators = [
     {
       label: 'Mi Balance',
       amount: balance,
       bgColor: '#FFF7E6',
       iconColor: '#F59E0B',
-      // Coin / lock icon as SVG
+      extra: (
+        <p className="text-xs font-semibold mt-1" style={{ color: '#22C55E' }}>
+          Disponible: {formatSoles(disponible)}
+        </p>
+      ),
       icon: (
         <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={1.8}>
           <circle cx="12" cy="12" r="9" />
@@ -34,6 +41,7 @@ export function TransactionIndicators({
       amount: income,
       bgColor: '#EEF2FF',
       iconColor: '#6366F1',
+      extra: null,
       icon: (
         <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={1.8}>
           <circle cx="12" cy="8" r="3" />
@@ -47,6 +55,7 @@ export function TransactionIndicators({
       amount: expense,
       bgColor: '#FFF0F3',
       iconColor: '#F43F5E',
+      extra: null,
       icon: (
         <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={1.8}>
           <rect x="3" y="5" width="18" height="14" rx="2" />
@@ -60,6 +69,7 @@ export function TransactionIndicators({
       amount: savings,
       bgColor: '#E6FAF8',
       iconColor: '#14B8A6',
+      extra: null,
       icon: (
         <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={1.8}>
           <path d="M19 7c0-1.1-.9-2-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7z" />
@@ -97,6 +107,7 @@ export function TransactionIndicators({
             <p className="text-xl font-bold" style={{ color: '#0F172A' }}>
               {formatSoles(ind.amount)}
             </p>
+            {ind.extra}
           </div>
         </div>
       ))}

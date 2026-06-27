@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { ensureDefaultCategories } from '@/lib/default-categories'
 import {
   TransactionIndicators,
   TransactionTabs,
@@ -57,25 +58,31 @@ export default function MovimientosPage() {
 
   const supabase = createClient()
 
-  const calculateStats = useCallback((txs: Transaction[]) => {
+  const calculateStats = useCallback((txs: Transaction[], cats: Category[]) => {
+    const ahorroId = cats.find((c) => c.name === 'Ahorro')?.id ?? null
     const income = txs
       .filter((t) => t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0)
     const expense = txs
       .filter((t) => t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0)
-    return {
-      balance: income - expense,
-      income,
-      expense,
-      savings: Math.max(0, income - expense),
-    }
+    // Ahorro Total = entradas de ahorro - salidas de ahorro (acumulado histórico)
+    const ahorroEntradas = txs
+      .filter((t) => t.type === 'income' && t.category_id === ahorroId)
+      .reduce((sum, t) => sum + t.amount, 0)
+    const ahorroSalidas = txs
+      .filter((t) => t.type === 'expense' && t.category_id === ahorroId)
+      .reduce((sum, t) => sum + t.amount, 0)
+    const savings = ahorroEntradas - ahorroSalidas
+    return { balance: income - expense, income, expense, savings }
   }, [])
 
   const fetchData = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+
+      await ensureDefaultCategories(supabase, user.id)
 
       const [{ data: txData }, { data: catData }] = await Promise.all([
         supabase
@@ -112,11 +119,41 @@ export default function MovimientosPage() {
   // Confirma y ejecuta el borrado
   const confirmDelete = async () => {
     if (!deletingId) return
-    const { error } = await supabase.from('transactions').delete().eq('id', deletingId)
-    if (!error) {
-      const updated = transactions.filter((t) => t.id !== deletingId)
-      setTransactions(updated)
+
+    const tx = transactions.find((t) => t.id === deletingId)
+    const cuotaMatch = tx?.description?.match(/^(.*)\((\d+)\/(\d+)\)$/)
+
+    if (cuotaMatch) {
+      const baseName = cuotaMatch[1].trim()
+      const total = Number(cuotaMatch[3])
+
+      // Consultar Supabase directamente para obtener todas las cuotas de la serie
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setDeletingId(null); return }
+
+      const { data: allTxs } = await supabase
+        .from('transactions')
+        .select('id, description')
+        .eq('user_id', user.id)
+
+      const seriesIds = (allTxs ?? [])
+        .filter((t) => {
+          const m = t.description?.match(/^(.*)\((\d+)\/(\d+)\)$/)
+          return m && m[1].trim() === baseName && Number(m[3]) === total
+        })
+        .map((t) => t.id)
+
+      if (seriesIds.length > 0) {
+        await supabase.from('transactions').delete().in('id', seriesIds)
+        setTransactions((prev) => prev.filter((t) => !seriesIds.includes(t.id)))
+      }
+    } else {
+      const { error } = await supabase.from('transactions').delete().eq('id', deletingId)
+      if (!error) {
+        setTransactions((prev) => prev.filter((t) => t.id !== deletingId))
+      }
     }
+
     setDeletingId(null)
   }
 
@@ -138,25 +175,31 @@ export default function MovimientosPage() {
     return cat?.name ?? 'Sin categoría'
   }
 
-  // Filtered by date range
+  // Filtered by date range — usa fechas locales en ambos lados para coincidir con el display
+  const toLocalDateStr = (d: Date) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
   const dateFiltered = transactions.filter((t) => {
-    if (dateRange.start || dateRange.end) {
-      const [y, m, d] = t.transaction_date.split('T')[0].split('-').map(Number)
-      const txDate = new Date(y, m - 1, d)
-      const rangeStart = dateRange.start && dateRange.end
-        ? (dateRange.start < dateRange.end ? dateRange.start : dateRange.end)
-        : dateRange.start
-      const rangeEnd = dateRange.start && dateRange.end
-        ? (dateRange.start < dateRange.end ? dateRange.end : dateRange.start)
-        : dateRange.end
-      if (rangeStart) { const s = new Date(rangeStart); s.setHours(0,0,0,0); if (txDate < s) return false }
-      if (rangeEnd) { const e = new Date(rangeEnd); e.setHours(23,59,59,999); if (txDate > e) return false }
-    }
+    if (!dateRange.start && !dateRange.end) return true
+    // Usar directamente la parte de fecha del string (transaction_date, no created_at)
+    const txStr = t.transaction_date.split('T')[0]
+    const aStr = dateRange.start ? toLocalDateStr(dateRange.start) : null
+    const bStr = dateRange.end   ? toLocalDateStr(dateRange.end)   : aStr
+    const lo = aStr && bStr ? (aStr <= bStr ? aStr : bStr) : (aStr ?? bStr)
+    const hi = aStr && bStr ? (aStr <= bStr ? bStr : aStr) : (aStr ?? bStr)
+    if (lo && txStr < lo) return false
+    if (hi && txStr > hi) return false
     return true
   })
 
-  // Calculate stats based purely on date range (ignoring tabs)
-  const currentStats = calculateStats(dateFiltered)
+  // Cards: solo transacciones hasta hoy (excluye cuotas futuras)
+  const todayStr = toLocalDateStr(new Date())
+  const pastTransactions = transactions.filter((t) => t.transaction_date.split('T')[0] <= todayStr)
+  const currentStats = calculateStats(pastTransactions, categories)
 
   // Filtered by tab for the table
   const filtered = dateFiltered
@@ -202,7 +245,11 @@ export default function MovimientosPage() {
     >
       {/* Modal de confirmación de eliminación */}
       {deletingId && (
-        <DeleteConfirmModal onConfirm={confirmDelete} onCancel={cancelDelete} />
+        <DeleteConfirmModal
+          onConfirm={confirmDelete}
+          onCancel={cancelDelete}
+          isCuotaSeries={!!transactions.find((t) => t.id === deletingId)?.description?.match(/\(\d+\/\d+\)$/)}
+        />
       )}
 
       {/* ── FIXED TOP SECTION ── */}
@@ -218,6 +265,7 @@ export default function MovimientosPage() {
           income={currentStats.income}
           expense={currentStats.expense}
           savings={currentStats.savings}
+          disponible={currentStats.balance - currentStats.savings}
         />
 
         {/* Date range picker */}

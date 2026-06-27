@@ -10,7 +10,6 @@ import {
   BarChart2,
   TrendingUp,
   Settings,
-  BookOpen,
 } from 'lucide-react'
 
 export function Sidebar() {
@@ -31,7 +30,6 @@ export function Sidebar() {
 
   const bottomItems = [
     { icon: Settings, label: 'Configuración', href: '/settings' },
-    { icon: BookOpen, label: 'Manual', href: '/help' },
   ]
 
   return (
