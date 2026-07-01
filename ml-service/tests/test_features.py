@@ -2,9 +2,10 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from datetime import datetime, timedelta
+import numpy as np
 import pandas as pd
 import pytest
-from features import build_expense_df, build_risk_features, build_risk_training_data
+from features import build_expense_df, build_risk_features, build_risk_training_data, build_prediction_df
 
 CATEGORIES = [
     {"id": "cat1", "name": "Alimentación", "type": "expense", "color": "#FF0000"},
@@ -80,3 +81,84 @@ def test_build_risk_training_data_y_has_risk_columns():
     _, y = build_risk_training_data(txs)
     for col in ["SOBREENDEUDAMIENTO", "GASTOS_HORMIGA", "VELOCIDAD_GASTO", "CATEGORIA_CRITICA"]:
         assert col in y.columns
+
+
+# --- build_prediction_df tests ---
+
+PRED_CATS = [
+    {"id": "food", "name": "Alimentación"},
+    {"id": "trans", "name": "Transporte"},
+]
+
+
+def _make_expense_df(n_days: int = 60, seed: int = 42) -> pd.DataFrame:
+    """Synthetic expense df as would come from build_expense_df()."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    base = datetime.now() - timedelta(days=n_days)
+    for day in range(n_days):
+        d = base + timedelta(days=day)
+        for cat in PRED_CATS:
+            if rng.random() > 0.3:
+                rows.append({
+                    "amount": float(rng.uniform(10, 100)),
+                    "category_id": cat["id"],
+                    "transaction_date": pd.Timestamp(d),
+                })
+    return pd.DataFrame(rows)
+
+
+def test_build_prediction_df_empty_returns_empty():
+    result = build_prediction_df(pd.DataFrame(), PRED_CATS)
+    assert result.empty
+
+
+def test_build_prediction_df_columns():
+    df = _make_expense_df(60)
+    result = build_prediction_df(df, PRED_CATS)
+    required = {
+        "date", "category_id", "daily_amount",
+        "category_encoded", "rolling_7d_cat", "rolling_30d_cat",
+        "rolling_7d_total", "day_of_month", "month",
+        "days_since_last_cat", "cat_monthly_trend",
+    }
+    assert required.issubset(set(result.columns))
+
+
+def test_build_prediction_df_rolling_nonnegative():
+    df = _make_expense_df(60)
+    result = build_prediction_df(df, PRED_CATS)
+    assert (result["rolling_7d_cat"] >= 0).all()
+    assert (result["rolling_30d_cat"] >= 0).all()
+    assert (result["rolling_7d_total"] >= 0).all()
+
+
+def test_build_prediction_df_category_encoded_valid():
+    df = _make_expense_df(60)
+    result = build_prediction_df(df, PRED_CATS)
+    assert set(result["category_encoded"].unique()).issubset({0, 1, -1})
+
+
+def test_build_prediction_df_day_of_month_range():
+    df = _make_expense_df(60)
+    result = build_prediction_df(df, PRED_CATS)
+    assert result["day_of_month"].between(1, 31).all()
+    assert result["month"].between(1, 12).all()
+
+
+def test_build_prediction_df_trend_zero_single_month():
+    """Single calendar month of data -> cat_monthly_trend must be 0."""
+    now = datetime.now()
+    month_start = now.replace(day=1)
+    rows = [
+        {
+            "amount": 50.0,
+            "category_id": "food",
+            "transaction_date": pd.Timestamp(month_start + timedelta(days=i)),
+        }
+        for i in range(10)
+    ]
+    df = pd.DataFrame(rows)
+    result = build_prediction_df(df, PRED_CATS)
+    food_rows = result[result["category_id"] == "food"]
+    assert (food_rows["cat_monthly_trend"] == 0.0).all()

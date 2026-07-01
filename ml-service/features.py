@@ -177,3 +177,70 @@ def _zero_risk_features() -> dict:
         "top_category_share": 0.0,
         "monthly_expense_trend": 0.0,
     }
+
+
+def build_prediction_df(expense_df: pd.DataFrame, categories: list[dict]) -> pd.DataFrame:
+    """
+    Aggregate expense transactions to daily totals per category with ML features.
+
+    Input: expense_df — columns: amount (float), category_id (str),
+           transaction_date (datetime, tz-naive) — subset of build_expense_df() output.
+
+    Returns: DataFrame with columns:
+             date, category_id, daily_amount, category_encoded,
+             rolling_7d_cat, rolling_30d_cat, rolling_7d_total,
+             day_of_month, month, days_since_last_cat, cat_monthly_trend
+    """
+    if expense_df.empty:
+        return pd.DataFrame()
+
+    df = expense_df[["amount", "category_id", "transaction_date"]].dropna().copy()
+    df["date"] = pd.to_datetime(df["transaction_date"]).dt.normalize()
+
+    # Daily totals per category
+    daily = df.groupby(["date", "category_id"])["amount"].sum().reset_index()
+    daily = daily.rename(columns={"amount": "daily_amount"})
+
+    if daily.empty:
+        return pd.DataFrame()
+
+    # Rolling 7d total across ALL categories (shift 1 to avoid leakage)
+    total_daily = (
+        df.groupby("date")["amount"].sum()
+        .reset_index()
+        .rename(columns={"amount": "total_daily"})
+        .sort_values("date")
+    )
+    total_daily["rolling_7d_total"] = (
+        total_daily["total_daily"].shift(1).rolling(7, min_periods=1).sum().fillna(0)
+    )
+
+    # Category encoding
+    cat_map = {c["id"]: i for i, c in enumerate(categories)}
+    daily["category_encoded"] = daily["category_id"].map(cat_map).fillna(-1).astype(int)
+    daily["day_of_month"] = daily["date"].dt.day
+    daily["month"] = daily["date"].dt.month
+
+    # Per-category rolling features and trend
+    result_groups = []
+    for _, group in daily.groupby("category_id"):
+        g = group.sort_values("date").copy()
+        shifted = g["daily_amount"].shift(1)
+        g["rolling_7d_cat"] = shifted.rolling(7, min_periods=1).sum().fillna(0)
+        g["rolling_30d_cat"] = shifted.rolling(30, min_periods=1).sum().fillna(0)
+        g["days_since_last_cat"] = g["date"].diff().dt.days.fillna(30).clip(0, 365)
+
+        monthly = g.groupby(g["date"].dt.to_period("M"))["daily_amount"].sum()
+        if len(monthly) >= 2:
+            x = np.arange(len(monthly), dtype=float)
+            slope = float(np.polyfit(x, monthly.values.astype(float), 1)[0])
+        else:
+            slope = 0.0
+        g["cat_monthly_trend"] = slope
+        result_groups.append(g)
+
+    daily = pd.concat(result_groups)
+    daily = daily.merge(total_daily[["date", "rolling_7d_total"]], on="date", how="left")
+    daily["rolling_7d_total"] = daily["rolling_7d_total"].fillna(0)
+
+    return daily.sort_values(["date", "category_id"]).reset_index(drop=True)
