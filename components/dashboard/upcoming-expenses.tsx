@@ -10,14 +10,25 @@ interface FixedExpense {
   category_id?: string
   frequency: 'semanal' | 'mensual' | 'anual'
   start_date: string
+  last_processed_date?: string | null
 }
 
-interface FutureTx {
-  id: string
-  description: string
-  amount: number
-  transaction_date: string
-  type: 'income' | 'expense'
+function isPaid(expense: FixedExpense): boolean {
+  if (!expense.last_processed_date) return false
+  const now = new Date()
+  const last = new Date(expense.last_processed_date)
+  switch (expense.frequency) {
+    case 'mensual':
+      return last.getFullYear() === now.getFullYear() && last.getMonth() === now.getMonth()
+    case 'semanal': {
+      const diffDays = (now.getTime() - last.getTime()) / (1000 * 60 * 60 * 24)
+      return diffDays < 7
+    }
+    case 'anual':
+      return last.getFullYear() === now.getFullYear()
+    default:
+      return false
+  }
 }
 
 interface Category {
@@ -33,7 +44,6 @@ interface UpcomingExpensesCardProps {
 export function UpcomingExpensesCard({ categories = [] }: UpcomingExpensesCardProps) {
   const supabase = createClient()
   const [expenses, setExpenses] = useState<FixedExpense[]>([])
-  const [futureTxs, setFutureTxs] = useState<FutureTx[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   
@@ -58,16 +68,13 @@ export function UpcomingExpensesCard({ categories = [] }: UpcomingExpensesCardPr
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
     const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`
 
-    const [{ data: recurring }, { data: future }] = await Promise.all([
-      supabase.from('recurring_expenses').select('*').eq('user_id', user.id).order('start_date', { ascending: true }),
-      supabase.from('transactions').select('id,description,amount,transaction_date,type')
-        .eq('user_id', user.id).gte('transaction_date', tomorrowStr)
-        .order('transaction_date', { ascending: true }),
-    ])
+    const { data: recurring } = await supabase
+      .from('recurring_expenses')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('start_date', { ascending: true })
 
     if (recurring) setExpenses(recurring)
-    // Solo cuotas: descripción con patrón "(X/N)"
-    if (future) setFutureTxs(future.filter((t) => /\(\d+\/\d+\)$/.test(t.description)))
   }
 
   const openAddModal = () => {
@@ -154,42 +161,9 @@ export function UpcomingExpensesCard({ categories = [] }: UpcomingExpensesCardPr
         </div>
 
         <div className="flex flex-col gap-4">
-          {/* Próximas cuotas (transacciones futuras con patrón X/N) */}
-          {futureTxs.map((tx) => {
-            const [ty, tm, td] = tx.transaction_date.split('T')[0].split('-').map(Number)
-            const d = new Date(ty, tm - 1, td)
-            const month = d.toLocaleString('es-PE', { month: 'short' })
-            const day = d.getDate()
-            const match = tx.description.match(/^(.*)\((\d+)\/(\d+)\)$/)
-            const baseName = match ? match[1].trim() : tx.description
-            const cuotaNum = match ? Number(match[2]) : null
-            const cuotaTotal = match ? Number(match[3]) : null
-            const isExpense = tx.type === 'expense'
-            return (
-              <div key={`future-${tx.id}`} className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-[#FFF7ED] border border-orange-100 flex flex-col items-center justify-center flex-shrink-0">
-                  <span className="text-[10px] font-semibold text-orange-400 uppercase">{month}</span>
-                  <span className="text-lg font-bold text-orange-500 leading-tight">{day}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-[#1E293B] truncate">{baseName}</p>
-                  {cuotaNum && cuotaTotal && (
-                    <p className="text-xs font-medium text-[#94A3B8]">
-                      Cuota {cuotaNum}/{cuotaTotal} · {cuotaTotal - cuotaNum + 1} restantes
-                    </p>
-                  )}
-                </div>
-                <div className={`px-4 py-2 rounded-xl border text-sm font-bold ${isExpense ? 'border-orange-100 text-orange-500' : 'border-green-100 text-green-500'}`}>
-                  {formatSoles(tx.amount)}
-                </div>
-              </div>
-            )
-          })}
-
-          {expenses.length === 0 && futureTxs.length === 0 ? (
+          {expenses.length === 0 ? (
             <p className="text-sm text-slate-500 text-center py-4">No hay gastos recurrentes</p>
-          ) : (
-            expenses.map((expense) => {
+          ) : expenses.map((expense) => {
               // Convert stored ISO string to local Date object correctly avoiding timezone shifts
               const dateStr = expense.start_date || new Date().toISOString()
               const [yearStr, monthStr, dayStr] = dateStr.split('T')[0].split('-')
@@ -229,14 +203,25 @@ export function UpcomingExpensesCard({ categories = [] }: UpcomingExpensesCardPr
                     </div>
                   </div>
 
-                  {/* Amount Block */}
-                  <div className="px-4 py-2 rounded-xl border border-slate-100 text-sm font-bold text-[#1E293B]">
-                    {formatSoles(expense.amount).replace('.00', '')}
+                  {/* Amount + Estado */}
+                  <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                    <span className="text-sm font-bold text-[#1E293B]">
+                      {formatSoles(expense.amount).replace('.00', '')}
+                    </span>
+                    <span
+                      className="text-[10px] font-bold px-2.5 py-0.5 rounded-full"
+                      style={isPaid(expense)
+                        ? { background: '#DCFCE7', color: '#16A34A' }
+                        : { background: '#FEF9C3', color: '#CA8A04' }
+                      }
+                    >
+                      {isPaid(expense) ? 'Pagado' : 'Sin pagar'}
+                    </span>
                   </div>
                 </div>
               )
-            })
-          )}
+          })}
+
         </div>
       </div>
 
@@ -285,7 +270,7 @@ export function UpcomingExpensesCard({ categories = [] }: UpcomingExpensesCardPr
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-[#0F172A] bg-white"
               >
                 <option value="" disabled>Selecciona una categoría</option>
-                {categories.filter(c => c.type === 'expense').map((cat) => (
+                {categories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name}
                   </option>

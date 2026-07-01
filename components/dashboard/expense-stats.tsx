@@ -1,15 +1,14 @@
 'use client'
 
+import { useState } from 'react'
 import { formatSoles } from '@/lib/utils-currency'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
-import { 
+import {
   Home, CreditCard, Car, ShoppingBag, Gamepad2, MoreHorizontal, Zap, HeartPulse, GraduationCap,
   Briefcase, Coffee, Plane, Utensils, Monitor, Smartphone, Gift, Music, Dog, BookOpen, Wrench,
   Scissors, Camera, Ticket, Clapperboard, Shirt, Dumbbell, Droplet, Flame, Leaf, Baby, Pill,
   Stethoscope, Bus, Train, Ship, Building, Trees, Smile, Star, Wifi, Tv, Sofa, Paintbrush, Trophy
 } from 'lucide-react'
-import { useState } from 'react'
-import { AddCategoryModal } from './add-category-modal'
 
 interface CategoryStat {
   name: string
@@ -20,8 +19,8 @@ interface CategoryStat {
 
 interface ExpenseStatsProps {
   data: CategoryStat[]
-  onCategoryAdded?: () => void
 }
+
 
 const COLORS = [
   '#AA96DA', '#F38181', '#4ECDC4', '#FFB067', '#3B82F6', '#9CA3AF'
@@ -67,8 +66,8 @@ const getCategoryIcon = (name: string, color: string, iconName?: string) => {
   )
 }
 
-export function ExpenseStats({ data, onCategoryAdded }: ExpenseStatsProps) {
-  const [showAddModal, setShowAddModal] = useState(false)
+export function ExpenseStats({ data }: ExpenseStatsProps) {
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; item: CategoryStat } | null>(null)
   const total = data.reduce((acc, curr) => acc + curr.value, 0)
   
   // Sort data descending to find the largest for the center
@@ -78,6 +77,16 @@ export function ExpenseStats({ data, onCategoryAdded }: ExpenseStatsProps) {
 
   return (
     <div className="bg-white rounded-3xl p-6 shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-slate-50/50 relative">
+
+      {tooltip && (
+        <div
+          className="fixed z-50 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-lg text-xs pointer-events-none"
+          style={{ left: tooltip.x + 14, top: tooltip.y, transform: 'translateY(-50%)' }}
+        >
+          <p className="font-semibold text-[#1E293B] mb-0.5">{tooltip.item.name}</p>
+          <p className="font-bold text-[#0F172A]">{formatSoles(tooltip.item.value)}</p>
+        </div>
+      )}
 
       {data.length > 0 ? (
         <div className="flex flex-col lg:flex-row items-center gap-8">
@@ -98,6 +107,10 @@ export function ExpenseStats({ data, onCategoryAdded }: ExpenseStatsProps) {
                   animationBegin={200}
                   animationDuration={1200}
                   animationEasing="ease-out"
+                  onMouseMove={(_: any, index: number, e: any) => {
+                    setTooltip({ x: e.clientX, y: e.clientY, item: sortedData[index] })
+                  }}
+                  onMouseLeave={() => setTooltip(null)}
                 >
                   {sortedData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
@@ -118,16 +131,6 @@ export function ExpenseStats({ data, onCategoryAdded }: ExpenseStatsProps) {
           {/* Custom Legend / List */}
           <div className="w-full lg:w-1/2 flex flex-col">
             
-            <div className="flex justify-end mb-2 pr-2">
-               <button 
-                 onClick={() => setShowAddModal(true)}
-                 className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white hover:bg-blue-700 transition shadow-sm"
-                 title="Añadir Categoría"
-               >
-                 <span className="text-xl font-light leading-none mb-0.5">+</span>
-               </button>
-            </div>
-
             <div className="flex flex-col gap-0 max-h-[350px] overflow-y-auto pr-2 scrollbar-clean">
               {sortedData.map((item, index) => {
                 const percentage = total > 0 ? ((item.value / total) * 100).toFixed(2) : '0.00'
@@ -153,15 +156,6 @@ export function ExpenseStats({ data, onCategoryAdded }: ExpenseStatsProps) {
         <p className="text-gray-500 text-center py-8">Sin datos de gastos disponibles</p>
       )}
 
-      {showAddModal && (
-        <AddCategoryModal
-          onClose={() => setShowAddModal(false)}
-          onSuccess={() => {
-            setShowAddModal(false)
-            onCategoryAdded?.()
-          }}
-        />
-      )}
     </div>
   )
 }

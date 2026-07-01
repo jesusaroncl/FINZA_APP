@@ -72,18 +72,36 @@ def _heuristic_response(transactions: list[dict], categories: list[dict]) -> dic
                 pass
 
     cat_lookup = {c["id"]: c["name"] for c in categories}
-    by_category_list = [
-        {"category": cat_lookup.get(cid, "Sin categoría"), "amount": round(amt, 2), "type": "variable"}
-        for cid, amt in sorted(by_cat.items(), key=lambda x: x[1], reverse=True)
-    ]
-    total = round(sum(by_cat.values()), 2)
+    total = sum(by_cat.values())
+
+    # Use daily rate extrapolation instead of dividing the past total
+    days_elapsed = max((now - month_start).days, 1)
+    daily_rate = total / days_elapsed
+    next_7_total = round(daily_rate * 7, 2)
+    next_30_total = round(daily_rate * 30, 2)
+
+    def scale_categories(target_total: float) -> list:
+        if total == 0:
+            return []
+        return sorted(
+            [
+                {
+                    "category": cat_lookup.get(cid, "Sin categoría"),
+                    "amount": round(amt / total * target_total, 2),
+                    "type": "variable",
+                }
+                for cid, amt in by_cat.items()
+            ],
+            key=lambda x: x["amount"],
+            reverse=True,
+        )
 
     return {
         "mode": "heuristic",
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "prediction": {
-            "next_7_days": {"total": round(total / 4, 2), "by_category": by_category_list},
-            "next_30_days": {"total": total, "by_category": by_category_list},
+            "next_7_days": {"total": next_7_total, "by_category": scale_categories(next_7_total)},
+            "next_30_days": {"total": next_30_total, "by_category": scale_categories(next_30_total)},
         },
         "risks": [],
         "recommendations": {"alerts": [], "tips": []},

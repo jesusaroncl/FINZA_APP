@@ -6,8 +6,8 @@ interface BalanceCardProps {
 
 export function BalanceCard({ balance }: BalanceCardProps) {
   return (
-    <div className="bg-white rounded-3xl p-6 shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-slate-50/50 flex items-center gap-5 w-fit min-w-[260px]">
-      <div className="w-14 h-14 rounded-full bg-[#FFFBEB] flex items-center justify-center flex-shrink-0">
+    <div className="bg-white rounded-3xl p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-slate-50/50 flex items-center gap-3 flex-1 min-w-0">
+      <div className="w-10 h-10 rounded-full bg-[#FFFBEB] flex items-center justify-center flex-shrink-0">
         {/* Money bag / Coin icon */}
         <svg
           viewBox="0 0 24 24"
@@ -25,7 +25,7 @@ export function BalanceCard({ balance }: BalanceCardProps) {
       </div>
       <div>
         <p className="text-xs font-semibold text-[#94A3B8] mb-1 uppercase tracking-wider">Mi Balance</p>
-        <p className="text-2xl font-bold text-[#0F172A]">{formatSoles(balance)}</p>
+        <p className="text-lg font-bold text-[#0F172A] truncate">{formatSoles(balance)}</p>
       </div>
     </div>
   )

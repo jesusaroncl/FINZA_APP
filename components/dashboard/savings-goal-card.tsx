@@ -8,26 +8,24 @@ import { Trophy, Target, Pencil, X } from 'lucide-react'
 interface SavingsGoalCardProps {
   target: number
   achieved: number
+  monthAchieved: number
   onSave?: (newTarget: number) => void
 }
 
-export function SavingsGoalCard({ target, achieved, onSave }: SavingsGoalCardProps) {
+
+export function SavingsGoalCard({ target, achieved, monthAchieved, onSave }: SavingsGoalCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [tempTarget, setTempTarget] = useState(target.toString())
+  const [tooltip, setTooltip] = useState<{ x: number; y: number } | null>(null)
 
   // Cap achieved at target for the chart visually
   const chartAchieved = Math.min(achieved, target)
   const remaining = Math.max(0, target - achieved)
-  
+
   const data = [
     { name: 'Achieved', value: chartAchieved },
     { name: 'Remaining', value: remaining },
   ]
-
-  const currentDate = new Date()
-  const month = currentDate.toLocaleString('es-PE', { month: 'short' })
-  const year = currentDate.getFullYear()
-  const capitalizedMonth = month.charAt(0).toUpperCase() + month.slice(1)
 
   const handleSave = () => {
     const val = Number(tempTarget)
@@ -41,24 +39,22 @@ export function SavingsGoalCard({ target, achieved, onSave }: SavingsGoalCardPro
     <>
       <div className="bg-white rounded-3xl p-6 shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-slate-50/50">
         
-        <div className="flex justify-between items-start mb-6">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold text-[#0F172A]">{formatSoles(target)}</span>
-            <button 
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-medium text-[#94A3B8]">Meta de Ahorro Anual</span>
+            <button
               onClick={() => { setTempTarget(target.toString()); setIsModalOpen(true); }}
-              className="w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"
+              className="w-5 h-5 rounded bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"
             >
-              <Pencil size={12} />
+              <Pencil size={10} />
             </button>
           </div>
-          <span className="text-sm font-medium text-[#64748B]">
-            {capitalizedMonth}, {year}
-          </span>
+          <span className="text-2xl font-bold text-[#0F172A]">{formatSoles(target)}</span>
         </div>
 
         <div className="flex gap-4">
           {/* Stats Column */}
-          <div className="flex flex-col gap-6 w-1/2">
+          <div className="flex flex-col gap-4 w-1/2">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Trophy size={14} className="text-[#94A3B8]" />
@@ -69,15 +65,30 @@ export function SavingsGoalCard({ target, achieved, onSave }: SavingsGoalCardPro
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Target size={14} className="text-[#94A3B8]" />
-                <span className="text-xs font-medium text-[#94A3B8]">Meta del mes</span>
+                <span className="text-xs font-medium text-[#94A3B8]">Logro del mes</span>
               </div>
-              <span className="text-lg font-bold text-[#0F172A]">{formatSoles(target)}</span>
+              <span className="text-lg font-bold text-[#0F172A]">{formatSoles(monthAchieved)}</span>
             </div>
           </div>
 
           {/* Gauge Chart Column */}
           <div className="w-1/2 flex flex-col items-center">
-            <div className="h-[100px] w-full relative">
+            <div
+              className="h-[100px] w-full relative"
+              onMouseMove={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+              }}
+              onMouseLeave={() => setTooltip(null)}
+            >
+              {tooltip && (
+                <div
+                  className="absolute z-10 bg-white border border-slate-200 rounded-lg px-2.5 py-1 shadow-md text-xs font-semibold text-[#0F172A] pointer-events-none whitespace-nowrap"
+                  style={{ left: tooltip.x, top: tooltip.y - 36, transform: 'translateX(-50%)' }}
+                >
+                  {formatSoles(achieved)}
+                </div>
+              )}
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -110,13 +121,13 @@ export function SavingsGoalCard({ target, achieved, onSave }: SavingsGoalCardPro
                 <div className="w-2 h-2 rounded-full bg-slate-700 absolute -top-1 -left-[3px]"></div>
               </div>
             </div>
-            
+
             <div className="flex justify-between w-full px-2 mt-2 text-xs font-medium text-[#94A3B8]">
-              <span>$0</span>
+              <span>S/ 0</span>
               <span>{formatSoles(target).replace('.00', '')}</span>
             </div>
             <span className="text-xs font-semibold text-[#0F172A] mt-2 text-center">
-              Meta vs Logro
+              Logro vs Meta
             </span>
           </div>
         </div>

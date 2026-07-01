@@ -38,7 +38,7 @@ def predict_expenses(df: pd.DataFrame, categories: list[dict]) -> dict:
         rolling_avg_30d = cat_df["amount"].tail(30).mean()
         category_avg_month = cat_df["amount"].mean()
         last_date = cat_df["transaction_date"].max()
-        days_since_base = (now - last_date.to_pydatetime()).days
+        days_since_base = max(0, (now - last_date.to_pydatetime()).days)
         cat_encoded = int(cat_df["category_encoded"].iloc[-1])
         rolling_avg_7d = float(rolling_avg_7d)
         rolling_avg_30d = float(rolling_avg_30d)
@@ -46,6 +46,12 @@ def predict_expenses(df: pd.DataFrame, categories: list[dict]) -> dict:
 
         cv = cat_df["amount"].std() / (cat_df["amount"].mean() + 1e-9)
         tx_type = "fixed" if cv < 0.3 else "variable"
+
+        # Transaction frequency: how often (per day) does this category get a transaction
+        date_range_days = max(
+            (cat_df["transaction_date"].max() - cat_df["transaction_date"].min()).days, 1
+        )
+        tx_per_day = len(cat_df) / date_range_days
 
         def _build_row(future_date: datetime, offset: int) -> list:
             return [
@@ -60,11 +66,12 @@ def predict_expenses(df: pd.DataFrame, categories: list[dict]) -> dict:
                 float(days_since_base + offset),
             ]
 
-        total_7 = sum(
+        # Multiply each daily prediction by tx_per_day to account for real frequency
+        total_7 = tx_per_day * sum(
             max(0.0, float(model.predict([_build_row(now + timedelta(days=i), i)])[0]))
             for i in range(1, 8)
         )
-        total_30 = sum(
+        total_30 = tx_per_day * sum(
             max(0.0, float(model.predict([_build_row(now + timedelta(days=i), i)])[0]))
             for i in range(1, 31)
         )

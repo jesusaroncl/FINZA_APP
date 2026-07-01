@@ -37,3 +37,43 @@ export async function ensureDefaultCategories(supabase: SupabaseClient, userId: 
     missing.map((c) => ({ ...c, user_id: userId }))
   )
 }
+
+export async function cleanupNonDefaultCategories(supabase: SupabaseClient, userId: string) {
+  const { data: allCats } = await supabase
+    .from('categories')
+    .select('id, name')
+    .eq('user_id', userId)
+
+  if (!allCats) return
+
+  const defaultNames = new Set(DEFAULT_CATEGORY_NAMES)
+  const nonDefault = allCats.filter(c => !defaultNames.has(c.name))
+  if (nonDefault.length === 0) return
+
+  const nonDefaultIds = nonDefault.map(c => c.id)
+
+  // Obtener el id de "Servicios Básicos"
+  const serviciosBasicos = allCats.find(c => c.name === 'Servicios Básicos')
+  if (!serviciosBasicos) return
+
+  // Reasignar transacciones de categorías no-default a Servicios Básicos
+  await supabase
+    .from('transactions')
+    .update({ category_id: serviciosBasicos.id })
+    .eq('user_id', userId)
+    .in('category_id', nonDefaultIds)
+
+  // Reasignar gastos recurrentes de categorías no-default a Servicios Básicos
+  await supabase
+    .from('recurring_expenses')
+    .update({ category_id: serviciosBasicos.id })
+    .eq('user_id', userId)
+    .in('category_id', nonDefaultIds)
+
+  // Borrar las categorías no-default
+  await supabase
+    .from('categories')
+    .delete()
+    .eq('user_id', userId)
+    .in('id', nonDefaultIds)
+}

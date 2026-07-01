@@ -16,7 +16,7 @@ import {
   Cell,
 } from 'recharts'
 import {
-  PeriodSelector,
+  MonthSelector,
   BalanceCard,
   ActivityChart,
   ExpenseStats,
@@ -24,15 +24,12 @@ import {
   UpcomingExpensesCard,
   LargestTransactionsCard,
   TotalSavingCard,
-  CuotasCard
+  CuotasCard,
+  DailyBudgetCard,
+  CategoryActivityChart
 } from '@/components/dashboard'
-import { formatSoles } from '@/lib/utils-currency'
-import { DateRangePicker } from '@/components/date-range-picker'
-import type { DateRange } from '@/components/date-range-picker'
 import { processRecurringExpenses } from '@/lib/process-recurring-expenses'
-import { ensureDefaultCategories } from '@/lib/default-categories'
-
-type Period = 'week' | 'month' | 'year' | 'custom'
+import { ensureDefaultCategories, cleanupNonDefaultCategories } from '@/lib/default-categories'
 
 interface Profile {
   first_name: string
@@ -45,6 +42,7 @@ interface Transaction {
   type: 'income' | 'expense'
   transaction_date: string
   description: string
+  category_id: string | null
 }
 
 interface DashboardStats {
@@ -83,20 +81,51 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedPeriod, setSelectedPeriod] = useState<Period>('month')
-  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null })
+  const [selectedMonth, setSelectedMonth] = useState<Date>(
+    () => new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  )
+  const [totalSavings, setTotalSavings] = useState(0)
+  const [totalBalance, setTotalBalance] = useState(0)
   const [savingsTarget, setSavingsTarget] = useState(20000)
+  const [dailyBudget, setDailyBudget] = useState(100)
 
   // Load saved target from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('finza_savings_target')
     if (saved) setSavingsTarget(Number(saved))
+    const savedBudget = localStorage.getItem('finza_daily_budget')
+    if (savedBudget) setDailyBudget(Number(savedBudget))
+  }, [])
+
+  // Fetch total savings (all time, not affected by month filter)
+  useEffect(() => {
+    const fetchTotalStats = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const [{ data: txData }, { data: catData }] = await Promise.all([
+        supabase.from('transactions').select('amount, type, category_id').eq('user_id', user.id),
+        supabase.from('categories').select('id, name').eq('user_id', user.id),
+      ])
+
+      if (txData) {
+        const income = txData.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+        const expense = txData.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+        setTotalBalance(income - expense)
+
+        const ahorroId = catData?.find(c => c.name === 'Ahorro')?.id ?? null
+        const ahorroEntradas = txData.filter(t => t.type === 'income' && t.category_id === ahorroId).reduce((s, t) => s + t.amount, 0)
+        const ahorroSalidas = txData.filter(t => t.type === 'expense' && t.category_id === ahorroId).reduce((s, t) => s + t.amount, 0)
+        setTotalSavings(Math.max(0, ahorroEntradas - ahorroSalidas))
+      }
+    }
+    fetchTotalStats()
   }, [])
 
   // Fetch data
   useEffect(() => {
     fetchDashboardData()
-  }, [selectedPeriod, dateRange])
+  }, [selectedMonth])
 
   const fetchDashboardData = async () => {
     try {
@@ -117,27 +146,22 @@ export default function DashboardPage() {
       }
 
       await ensureDefaultCategories(supabase, user.id)
+      await cleanupNonDefaultCategories(supabase, user.id)
 
       // Procesar gastos recurrentes antes de cargar las transacciones
       await processRecurringExpenses(supabase, user.id)
 
-      // Calculate date range based on period
-      const effectiveRange = getDateRange(selectedPeriod, dateRange)
+      // Calculate date range for selected month
+      const { startStr, endStr } = getMonthRange(selectedMonth)
 
       // Fetch transactions
-      let query = supabase
+      const query = supabase
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
-        .gte('transaction_date', effectiveRange.start.toISOString())
+        .gte('transaction_date', startStr)
+        .lte('transaction_date', endStr)
         .order('transaction_date', { ascending: false })
-
-      if (effectiveRange.end) {
-        // Establecer a las 23:59:59 para incluir todo el día de fin
-        const endOfDay = new Date(effectiveRange.end)
-        endOfDay.setHours(23, 59, 59, 999)
-        query = query.lte('transaction_date', endOfDay.toISOString())
-      }
 
       const [transactionsRes, categoriesRes] = await Promise.all([
         query,
@@ -157,28 +181,14 @@ export default function DashboardPage() {
     }
   }
 
-  // Utilities
-  const getDateRange = (period: Period, customRange?: DateRange) => {
-    if (period === 'custom' && customRange?.start) {
-      return { start: customRange.start, end: customRange.end || new Date() }
+  const getMonthRange = (month: Date) => {
+    const y = month.getFullYear()
+    const m = String(month.getMonth() + 1).padStart(2, '0')
+    const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
+    return {
+      startStr: `${y}-${m}-01`,
+      endStr: `${y}-${m}-${String(lastDay).padStart(2, '0')}T23:59:59`,
     }
-
-    const end = new Date()
-    const start = new Date()
-
-    switch (period) {
-      case 'week':
-        start.setDate(end.getDate() - 7)
-        break
-      case 'month':
-        start.setMonth(end.getMonth() - 1)
-        break
-      case 'year':
-        start.setFullYear(end.getFullYear() - 1)
-        break
-    }
-
-    return { start, end }
   }
 
   const calculateStats = (): DashboardStats => {
@@ -201,60 +211,97 @@ export default function DashboardPage() {
     }
   }
 
+  const calculateMonthSavings = (): number => {
+    const ahorroId = categories.find(c => c.name === 'Ahorro')?.id ?? null
+    const entradas = transactions.filter(t => t.type === 'income' && t.category_id === ahorroId).reduce((s, t) => s + t.amount, 0)
+    const salidas = transactions.filter(t => t.type === 'expense' && t.category_id === ahorroId).reduce((s, t) => s + t.amount, 0)
+    return Math.max(0, entradas - salidas)
+  }
+
   const getChartData = (): ChartData[] => {
-    const days: Record<string, { ingresos: number; gastos: number }> = {}
+    const lastDay = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0).getDate()
+    const days: Record<number, { ingresos: number; gastos: number }> = {}
+
+    for (let d = 1; d <= lastDay; d++) {
+      days[d] = { ingresos: 0, gastos: 0 }
+    }
 
     transactions.forEach((t) => {
-      const date = new Date(t.transaction_date)
-      const dayStr = date.toLocaleDateString('es-PE', {
-        weekday: 'short',
-      })
-
-      if (!days[dayStr]) {
-        days[dayStr] = { ingresos: 0, gastos: 0 }
-      }
-
+      const [, , dayPart] = t.transaction_date.split('T')[0].split('-')
+      const day = Number(dayPart)
       if (t.type === 'income') {
-        days[dayStr].ingresos += t.amount
+        days[day].ingresos += t.amount
       } else {
-        days[dayStr].gastos += t.amount
+        days[day].gastos += t.amount
       }
     })
 
-    return Object.entries(days).map(([name, data]) => ({
-      name,
-      ...data,
-    }))
+    return Object.keys(days)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .map((day) => ({ name: String(day), ...days[day] }))
   }
+
+  const DEFAULT_EXPENSE_CATS = new Set(['Salud', 'Salario', 'Comida', 'Transporte', 'Servicios Básicos', 'Entretenimiento', 'Deudas', 'Ahorro'])
 
   const getCategoryStats = (): CategoryStats[] => {
     const stats: Record<string, { value: number; name: string; color: string; icon?: string }> = {}
 
-    // Inicializar todas las categorías de tipo gasto en 0
-    categories.filter(c => c.type === 'expense').forEach((cat) => {
+    // Inicializar solo categorías default (sin filtrar por tipo, Ahorro es income pero puede tener gastos)
+    categories.filter(c => DEFAULT_EXPENSE_CATS.has(c.name)).forEach((cat) => {
       stats[cat.name] = { value: 0, name: cat.name, color: cat.color || '#94A3B8', icon: cat.icon }
     })
+
+    // Asegurar que "Servicios Básicos" existe como fallback
+    if (!stats['Servicios Básicos']) {
+      stats['Servicios Básicos'] = { value: 0, name: 'Servicios Básicos', color: '#8B5CF6', icon: 'zap' }
+    }
 
     transactions
       .filter((t) => t.type === 'expense')
       .forEach((t: any) => {
         const cat = categories.find((c) => c.id === t.category_id)
-        const name = cat?.name || 'Sin categoría'
-        const color = cat?.color || '#94A3B8'
-        const icon = cat?.icon
-        
-        if (!stats[name]) {
-          stats[name] = { value: 0, name, color, icon }
+        const name = cat?.name || ''
+
+        if (DEFAULT_EXPENSE_CATS.has(name)) {
+          stats[name].value += t.amount
+        } else {
+          stats['Servicios Básicos'].value += t.amount
         }
-        stats[name].value += t.amount
       })
 
     return Object.values(stats)
   }
 
+  const getDailyDetails = (): Record<string, { name: string; amount: number; color?: string }[]> => {
+    const details: Record<string, Record<string, { amount: number; color?: string }>> = {}
+
+    transactions
+      .filter(t => t.type === 'expense')
+      .forEach(t => {
+        const day = String(Number(t.transaction_date.split('T')[0].split('-')[2]))
+        const cat = categories.find(c => c.id === t.category_id)
+        const catName = cat?.name || 'Sin categoría'
+        if (!details[day]) details[day] = {}
+        if (!details[day][catName]) details[day][catName] = { amount: 0, color: cat?.color }
+        details[day][catName].amount += t.amount
+      })
+
+    const result: Record<string, { name: string; amount: number; color?: string }[]> = {}
+    Object.entries(details).forEach(([day, cats]) => {
+      result[day] = Object.entries(cats)
+        .map(([name, { amount, color }]) => ({ name, amount, color }))
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 5)
+    })
+    return result
+  }
+
   const stats = calculateStats()
+  const monthSavings = calculateMonthSavings()
   const chartData = getChartData()
   const categoryStats = getCategoryStats()
+  const dailyDetails = getDailyDetails()
 
   const COLORS = [
     '#FF6B9D',
@@ -284,23 +331,7 @@ export default function DashboardPage() {
           </h1>
           
           <div className="flex items-center gap-4 mt-2">
-            <PeriodSelector
-              selectedPeriod={selectedPeriod}
-              onPeriodChange={(p) => {
-                setSelectedPeriod(p)
-                setDateRange({ start: null, end: null })
-              }}
-            />
-            <div className="bg-white rounded-lg border border-slate-200">
-              <DateRangePicker
-                value={dateRange}
-                align="right"
-                onChange={(range) => {
-                  setDateRange(range)
-                  if (range.start || range.end) setSelectedPeriod('custom')
-                }}
-              />
-            </div>
+            <MonthSelector value={selectedMonth} onChange={setSelectedMonth} />
           </div>
         </div>
 
@@ -309,19 +340,31 @@ export default function DashboardPage() {
           
           {/* Left Column (Main Content) - approx 65% */}
           <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex items-center gap-6 mb-8 overflow-x-auto pb-2">
-              <TotalSavingCard savings={stats.savings || 0} />
-              <BalanceCard balance={stats.balance} />
+            <div className="flex items-center gap-4 mb-8">
+              <TotalSavingCard savings={totalSavings} />
+              <BalanceCard balance={totalBalance} />
+              <DailyBudgetCard
+                budget={dailyBudget}
+                onSave={(val) => {
+                  setDailyBudget(val)
+                  localStorage.setItem('finza_daily_budget', val.toString())
+                }}
+              />
             </div>
             
-            <h3 className="text-[17px] font-bold text-[#334155] mb-4">Actividad Semanal</h3>
+            <h3 className="text-[17px] font-bold text-[#334155] mb-4">Actividad Mensual</h3>
             <div className="mb-8">
-              <ActivityChart data={chartData} />
+              <ActivityChart data={chartData} dailyBudget={dailyBudget} dailyDetails={dailyDetails} />
             </div>
 
             <h3 className="text-[17px] font-bold text-[#334155] mb-4">Estadística de Gastos</h3>
+            <div className="mb-8">
+              <ExpenseStats data={categoryStats} />
+            </div>
+
+            <h3 className="text-[17px] font-bold text-[#334155] mb-4">Actividad por Categoría</h3>
             <div>
-              <ExpenseStats data={categoryStats} onCategoryAdded={fetchDashboardData} />
+              <CategoryActivityChart transactions={transactions} categories={categories} />
             </div>
           </div>
 
@@ -329,9 +372,10 @@ export default function DashboardPage() {
           <div className="w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 flex flex-col">
             <h3 className="text-[17px] font-bold text-[#334155] mb-4">Meta de ahorro</h3>
             <div className="mb-8">
-              <SavingsGoalCard 
-                target={savingsTarget} 
-                achieved={stats.savings} 
+              <SavingsGoalCard
+                target={savingsTarget}
+                achieved={totalSavings}
+                monthAchieved={monthSavings}
                 onSave={(newTarget) => {
                   setSavingsTarget(newTarget)
                   localStorage.setItem('finza_savings_target', newTarget.toString())

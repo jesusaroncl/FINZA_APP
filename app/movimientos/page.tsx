@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ensureDefaultCategories } from '@/lib/default-categories'
+import { processRecurringExpenses } from '@/lib/process-recurring-expenses'
 import {
   TransactionIndicators,
   TransactionTabs,
@@ -83,6 +84,7 @@ export default function MovimientosPage() {
       if (!user) return
 
       await ensureDefaultCategories(supabase, user.id)
+      await processRecurringExpenses(supabase, user.id)
 
       const [{ data: txData }, { data: catData }] = await Promise.all([
         supabase
