@@ -46,6 +46,7 @@ export function Sidebar() {
             width={72}
             height={72}
             className="rounded-2xl"
+            style={{ width: 'auto', height: 'auto' }}
             priority
           />
         </Link>

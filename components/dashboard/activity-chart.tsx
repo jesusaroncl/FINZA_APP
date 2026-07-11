@@ -232,13 +232,17 @@ export function ActivityChart({ data, dailyBudget, dailyDetails }: ActivityChart
             type="monotone"
             stroke="#F97316"
             strokeWidth={2}
-            dot={(props: any) => (
-              <CumDot
-                {...props}
-                dailyBudget={dailyBudget}
-                onDotClick={handleDotClick}
-              />
-            )}
+            dot={(props: any) => {
+              const { key, ...rest } = props
+              return (
+                <CumDot
+                  key={key}
+                  {...rest}
+                  dailyBudget={dailyBudget}
+                  onDotClick={handleDotClick}
+                />
+              )
+            }}
             activeDot={false}
             isAnimationActive={true}
             animationBegin={600}
