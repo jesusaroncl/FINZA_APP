@@ -6,6 +6,13 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  async redirects() {
+    return [
+      { source: '/login', destination: '/auth/login', permanent: false },
+      { source: '/forgot-password', destination: '/auth/forgot-password', permanent: false },
+      { source: '/configuracion', destination: '/settings', permanent: false },
+    ]
+  },
 }
 
 export default nextConfig

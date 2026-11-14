@@ -10,7 +10,7 @@ RISK_FEATURE_COLS = [
 ]
 
 RISK_THRESHOLDS = {
-    "SOBREENDEUDAMIENTO": (0.3, "Tus cuotas activas superan el 30% de tu ingreso mensual"),
+    "SOBREENDEUDAMIENTO": (0.5, "Tus cuotas activas superan el 30% de tu ingreso mensual"),
     "GASTOS_HORMIGA":     (0.5, "Detectamos muchas micro-transacciones menores a S/15"),
     "VELOCIDAD_GASTO":    (0.5, "Tu velocidad de gasto este mes supera tu promedio histórico"),
     "CATEGORIA_CRITICA":  (0.5, "Una categoría concentra más del 50% de tus gastos del mes"),
@@ -102,7 +102,7 @@ def _score_risk(
 
 def _rule_based_score(risk_type: str, feats: dict) -> float:
     if risk_type == "SOBREENDEUDAMIENTO":
-        return min(feats["cuotas_to_income_ratio"] / 0.3, 1.0)
+        return min(feats["cuotas_to_income_ratio"] / 0.3 * 0.5, 1.0)
     if risk_type == "GASTOS_HORMIGA":
         return min(feats["small_tx_count_7d"] / 10.0, 1.0)
     if risk_type == "VELOCIDAD_GASTO":
@@ -111,7 +111,7 @@ def _rule_based_score(risk_type: str, feats: dict) -> float:
             return min(feats["expense_velocity"] / 1.0, 1.0) * 0.6
         return 0.0
     if risk_type == "CATEGORIA_CRITICA":
-        return min(feats["top_category_share"] / 0.5, 1.0)
+        return min(feats["top_category_share"], 1.0)
     return 0.0
 
 

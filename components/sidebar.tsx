@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { forceSignOut } from '@/lib/supabase/sign-out'
 import {
   Wallet,
   BarChart2,
@@ -14,12 +15,28 @@ import {
 
 export function Sidebar() {
   const pathname = usePathname()
-  const router = useRouter()
   const supabase = createClient()
 
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') window.location.replace('/auth/login')
+    })
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) window.location.reload()
+    }
+    window.addEventListener('pageshow', onPageShow)
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) window.location.replace('/auth/login')
+    })
+    return () => {
+      data.subscription.unsubscribe()
+      window.removeEventListener('pageshow', onPageShow)
+    }
+  }, [])
+
   const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/auth/login')
+    await forceSignOut(supabase)
+    window.location.replace('/auth/login')
   }
 
   const navItems = [

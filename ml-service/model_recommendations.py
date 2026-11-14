@@ -39,6 +39,7 @@ def _build_tips(transactions: list[dict], categories: list[dict]) -> list[dict]:
     df = pd.DataFrame(transactions)
     df["transaction_date"] = pd.to_datetime(df["transaction_date"], utc=True).dt.tz_localize(None)
     expenses = df[df["type"] == "expense"].copy()
+    expenses = expenses[expenses["transaction_date"] <= pd.Timestamp(datetime.now())]
 
     if expenses.empty:
         return []

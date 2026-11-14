@@ -1,6 +1,12 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+function redirectWithCookies(url: URL, from: NextResponse) {
+  const res = NextResponse.redirect(url)
+  from.cookies.getAll().forEach((c) => res.cookies.set(c))
+  return res
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -47,16 +53,18 @@ export async function updateSession(request: NextRequest) {
   if (!user && isProtectedRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
-    return NextResponse.redirect(url)
+    return redirectWithCookies(url, supabaseResponse)
   }
 
   // Redirigir al usuario logueado al dashboard si intenta acceder a login o register
   if (user && isAuthRoute && (request.nextUrl.pathname === '/auth/login' || request.nextUrl.pathname === '/auth/register')) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
+    return redirectWithCookies(url, supabaseResponse)
   }
 
-
+  if (isProtectedRoute) {
+    supabaseResponse.headers.set('Cache-Control', 'private, no-store, max-age=0')
+  }
   return supabaseResponse
 }

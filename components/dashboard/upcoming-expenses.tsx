@@ -3,6 +3,11 @@ import { Plus, Pencil, Trash2, X } from 'lucide-react'
 import { formatSoles } from '@/lib/utils-currency'
 import { createClient } from '@/lib/supabase/client'
 
+function todayLocal() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
 interface FixedExpense {
   id: string
   name: string
@@ -52,6 +57,8 @@ export function UpcomingExpensesCard({ categories = [] }: UpcomingExpensesCardPr
   const [newFreq, setNewFreq] = useState<'semanal' | 'mensual' | 'anual'>('mensual')
   const [newDate, setNewDate] = useState('')
   const [newCategory, setNewCategory] = useState('')
+  const [formError, setFormError] = useState('')
+  const [savingExpense, setSavingExpense] = useState(false)
 
   useEffect(() => {
     fetchExpenses()
@@ -78,69 +85,74 @@ export function UpcomingExpensesCard({ categories = [] }: UpcomingExpensesCardPr
   }
 
   const openAddModal = () => {
+    setFormError('')
     setEditingId(null)
     setNewName('')
     setNewAmount('')
     setNewFreq('mensual')
-    setNewDate(new Date().toISOString().split('T')[0])
+    setNewDate(todayLocal())
     setNewCategory('')
     setIsModalOpen(true)
   }
 
   const openEditModal = (expense: FixedExpense) => {
+    setFormError('')
     setEditingId(expense.id)
     setNewName(expense.name)
     setNewAmount(expense.amount.toString())
     setNewFreq(expense.frequency)
-    const dateStr = expense.start_date || new Date().toISOString()
-    setNewDate(dateStr.split('T')[0])
+    setNewDate(expense.start_date ? expense.start_date.split('T')[0] : todayLocal())
     setNewCategory(expense.category_id || '')
     setIsModalOpen(true)
   }
 
   const handleSave = async () => {
-    if (!newName || !newAmount || !newDate || !newCategory) return
-    const val = Number(newAmount)
-    if (isNaN(val) || val <= 0) return
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    if (editingId) {
-      // Update existing
-      await supabase
-        .from('recurring_expenses')
-        .update({
-          name: newName,
-          amount: val,
-          frequency: newFreq,
-          start_date: newDate,
-          category_id: newCategory
-        })
-        .eq('id', editingId)
-    } else {
-      // Create new
-      await supabase
-        .from('recurring_expenses')
-        .insert({
-          user_id: user.id,
-          name: newName,
-          amount: val,
-          frequency: newFreq,
-          start_date: newDate,
-          category_id: newCategory
-        })
+    const missing: string[] = []
+    if (!newName.trim()) missing.push('tipo de gasto')
+    if (!newAmount) missing.push('monto')
+    if (!newDate) missing.push('fecha')
+    if (!newCategory) missing.push('categoría')
+    if (missing.length > 0) {
+      setFormError(`Completa todos los campos obligatorios: ${missing.join(', ')}.`)
+      return
     }
-    
-    await fetchExpenses()
-    
-    setIsModalOpen(false)
-    setEditingId(null)
-    setNewName('')
-    setNewAmount('')
-    setNewFreq('mensual')
-    setNewDate('')
-    setNewCategory('')
+    const val = Number(newAmount)
+    if (!Number.isFinite(val) || val <= 0) {
+      setFormError('El monto debe ser mayor a 0.')
+      return
+    }
+    setFormError('')
+    setSavingExpense(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setFormError('Tu sesión expiró. Vuelve a iniciar sesión.')
+        return
+      }
+      const row = { name: newName.trim(), amount: val, frequency: newFreq, start_date: newDate, category_id: newCategory }
+      const { data, error } = editingId
+        ? await supabase.from('recurring_expenses').update(row).eq('id', editingId).select('id')
+        : await supabase.from('recurring_expenses').insert({ ...row, user_id: user.id }).select('id')
+      if (error || !data || data.length === 0) {
+        console.error('Error guardando gasto fijo:', error)
+        setFormError('No se pudo guardar el gasto fijo. Intenta de nuevo.')
+        return
+      }
+      await fetchExpenses()
+
+      setIsModalOpen(false)
+      setEditingId(null)
+      setNewName('')
+      setNewAmount('')
+      setNewFreq('mensual')
+      setNewDate('')
+      setNewCategory('')
+    } catch (e) {
+      console.error('Error guardando gasto fijo:', e)
+      setFormError('No se pudo guardar el gasto fijo. Intenta de nuevo.')
+    } finally {
+      setSavingExpense(false)
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -248,25 +260,27 @@ export function UpcomingExpensesCard({ categories = [] }: UpcomingExpensesCardPr
                 type="text"
                 placeholder="Ingresa Tipo de Gasto"
                 value={newName}
-                onChange={(e) => setNewName(e.target.value)}
+                onChange={(e) => { setNewName(e.target.value); setFormError('') }}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-[#0F172A] placeholder:text-[#94A3B8]"
               />
               <input 
                 type="number"
+                min="0.01"
+                step="0.01"
                 placeholder="Ingresa un monto"
                 value={newAmount}
-                onChange={(e) => setNewAmount(e.target.value)}
+                onChange={(e) => { setNewAmount(e.target.value); setFormError('') }}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-[#0F172A] placeholder:text-[#94A3B8]"
               />
               <input 
                 type="date"
                 value={newDate}
-                onChange={(e) => setNewDate(e.target.value)}
+                onChange={(e) => { setNewDate(e.target.value); setFormError('') }}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-[#0F172A]"
               />
               <select
                 value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
+                onChange={(e) => { setNewCategory(e.target.value); setFormError('') }}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-[#0F172A] bg-white"
               >
                 <option value="" disabled>Selecciona una categoría</option>
@@ -310,18 +324,20 @@ export function UpcomingExpensesCard({ categories = [] }: UpcomingExpensesCardPr
               </label>
             </div>
 
+            {formError && (<div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{formError}</div>)}
             <div className="flex gap-3">
               <button 
                 onClick={() => setIsModalOpen(false)}
                 className="flex-1 py-3 rounded-xl border border-slate-200 text-[#1E293B] font-semibold hover:bg-slate-50 transition-colors"
               >
-                Cancel
+                Cancelar
               </button>
               <button 
                 onClick={handleSave}
-                className="flex-1 py-3 rounded-xl bg-[#1D4ED8] text-white font-semibold hover:bg-blue-800 transition-colors"
+                disabled={savingExpense}
+                className="flex-1 py-3 rounded-xl bg-[#1D4ED8] text-white font-semibold hover:bg-blue-800 transition-colors disabled:opacity-60"
               >
-                Guardar
+                {savingExpense ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>
