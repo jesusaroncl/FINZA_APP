@@ -25,7 +25,21 @@ export default function SettingsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Subida ya completada de avatarFile: evita resubir (y dejar huérfanos) al reintentar
+  const uploadedRef = useRef<{ file: File; url: string } | null>(null)
+  const previewRef = useRef('')
   const supabase = createClient()
+
+  useEffect(() => {
+    previewRef.current = previewUrl
+  }, [previewUrl])
+
+  // Liberar el blob del preview al salir de la página sin guardar
+  useEffect(() => () => revokeBlob(previewRef.current), [])
+
+  const openFilePicker = () => {
+    if (!saving) fileInputRef.current?.click()
+  }
 
   useEffect(() => {
     async function loadProfile() {
@@ -84,6 +98,7 @@ export default function SettingsPage() {
   }
 
   const handleSelectPreset = (url: string) => {
+    if (saving) return
     revokeBlob(previewUrl)
     setAvatarFile(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -93,6 +108,7 @@ export default function SettingsPage() {
   }
 
   const handleRemoveFile = () => {
+    if (saving) return
     revokeBlob(previewUrl)
     setAvatarFile(null)
     setSelectedPreset(null)
@@ -113,8 +129,10 @@ export default function SettingsPage() {
 
       let finalAvatarUrl = avatarUrl
 
-      // Si hay un archivo nuevo, lo subimos
-      if (avatarFile) {
+      // Si hay un archivo nuevo, lo subimos (salvo que ya se haya subido en un intento previo)
+      if (avatarFile && uploadedRef.current?.file === avatarFile) {
+        finalAvatarUrl = uploadedRef.current.url
+      } else if (avatarFile) {
         const ext = ALLOWED_TYPES[avatarFile.type]
         const filePath = `${user.id}/${Date.now()}.${ext}`
 
@@ -132,21 +150,33 @@ export default function SettingsPage() {
           .getPublicUrl(filePath)
           
         finalAvatarUrl = publicUrl
+        uploadedRef.current = { file: avatarFile, url: publicUrl }
       } else if (selectedPreset) {
         finalAvatarUrl = selectedPreset
       }
 
-      const { data, error } = await supabase
+      const profileFields = {
+        first_name: firstName,
+        last_name: lastName,
+        updated_at: new Date().toISOString(),
+        ...(finalAvatarUrl ? { avatar_url: finalAvatarUrl } : {}),
+      }
+
+      // Update primero (solo requiere la política UPDATE); si no existe la fila, se inserta.
+      let { data, error } = await supabase
         .from('profiles')
-        .upsert({
-          id: user.id,
-          first_name: firstName,
-          last_name: lastName,
-          updated_at: new Date().toISOString(),
-          ...(finalAvatarUrl ? { avatar_url: finalAvatarUrl } : {}),
-        }, { onConflict: 'id' })
+        .update(profileFields)
+        .eq('id', user.id)
         .select('id, avatar_url')
         .maybeSingle()
+
+      if (!error && !data) {
+        ;({ data, error } = await supabase
+          .from('profiles')
+          .insert({ id: user.id, ...profileFields })
+          .select('id, avatar_url')
+          .maybeSingle())
+      }
 
       if (error || !data) {
         setMessage({ type: 'error', text: 'No se pudo actualizar el perfil. Intenta de nuevo.' })
@@ -158,6 +188,7 @@ export default function SettingsPage() {
       setPreviewUrl(data.avatar_url ?? finalAvatarUrl)
       setAvatarFile(null)
       setSelectedPreset(null)
+      uploadedRef.current = null
       if (fileInputRef.current) fileInputRef.current.value = ''
       setMessage({ type: 'success', text: 'Perfil actualizado correctamente.' })
     } catch (error: any) {
@@ -201,11 +232,11 @@ export default function SettingsPage() {
                     role="button"
                     tabIndex={0}
                     aria-label="Cambiar foto de perfil"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={openFilePicker}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
-                        fileInputRef.current?.click()
+                        openFilePicker()
                       }
                     }}
                   >
@@ -241,7 +272,8 @@ export default function SettingsPage() {
                 />
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={openFilePicker}
+                  disabled={saving}
                   className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors"
                 >
                   Subir nueva foto
@@ -258,6 +290,7 @@ export default function SettingsPage() {
                       aria-label={`Avatar ${i + 1}`}
                       aria-pressed={selectedPreset === url}
                       onClick={() => handleSelectPreset(url)}
+                      disabled={saving}
                       className={`rounded-full ${selectedPreset === url ? 'ring-2 ring-[#1D4ED8] ring-offset-2' : ''}`}
                     >
                       <img src={url} alt="" className="w-10 h-10 rounded-full" />

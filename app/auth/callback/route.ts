@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { EmailOtpType } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
-const OTP_TYPES: EmailOtpType[] = ['signup', 'email', 'recovery', 'invite', 'magiclink', 'email_change']
+const OTP_TYPES: EmailOtpType[] = ['signup', 'email', 'recovery', 'email_change']
 
 function safeNext(value: string | null): string {
   if (!value || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) {

@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { forceSignOut } from '@/lib/supabase/sign-out'
 import {
   Wallet,
   BarChart2,
@@ -34,8 +35,7 @@ export function Sidebar() {
   }, [])
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) await supabase.auth.signOut({ scope: 'local' })
+    await forceSignOut(supabase)
     window.location.replace('/auth/login')
   }
 

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { AuthContainer } from '@/components/auth/auth-container'
 import { AuthInput } from '@/components/auth/auth-input'
 import { createClient } from '@/lib/supabase/client'
+import { forceSignOut } from '@/lib/supabase/sign-out'
 
 export default function ResetPasswordPage() {
   const [checking, setChecking] = useState(true)
@@ -37,11 +38,16 @@ export default function ResetPasswordPage() {
     setLoading(true)
     const { error } = await supabase.auth.updateUser({ password })
     if (error) {
-      setError(error.message)
+      console.error('[reset-password] updateUser error:', error.message)
+      setError(
+        error.code === 'same_password'
+          ? 'La nueva contraseña debe ser distinta a la anterior.'
+          : 'No se pudo actualizar la contraseña. Solicita un nuevo enlace e inténtalo de nuevo.'
+      )
       setLoading(false)
       return
     }
-    await supabase.auth.signOut()
+    await forceSignOut(supabase)
     window.location.replace('/auth/login?reset=1')
   }
 
