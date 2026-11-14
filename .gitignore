@@ -18,3 +18,8 @@ node_modules
 # Backups
 **/*.sql
 docs/*.docx
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
