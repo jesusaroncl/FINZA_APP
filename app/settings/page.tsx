@@ -4,11 +4,20 @@ import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Save, User, Upload, X } from 'lucide-react'
 
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+const ALLOWED_TYPES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg' }
+const PRESET_AVATARS = [1, 2, 3, 4, 5, 6].map((n) => `/avatars/avatar-${n}.svg`)
+
+function revokeBlob(url: string) {
+  if (url.startsWith('blob:')) URL.revokeObjectURL(url)
+}
+
 export default function SettingsPage() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState('')
   
   const [loading, setLoading] = useState(true)
@@ -28,7 +37,7 @@ export default function SettingsPage() {
           .from('profiles')
           .select('*')
           .eq('id', user.id)
-          .single()
+          .maybeSingle()
 
         if (error) throw error
 
@@ -39,6 +48,9 @@ export default function SettingsPage() {
             setAvatarUrl(data.avatar_url)
             setPreviewUrl(data.avatar_url)
           }
+        } else {
+          setFirstName(user.user_metadata?.first_name || '')
+          setLastName(user.user_metadata?.last_name || '')
         }
       } catch (error) {
         console.error('Error loading profile:', error)
@@ -53,13 +65,37 @@ export default function SettingsPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
+      if (!ALLOWED_TYPES[file.type]) {
+        setMessage({ type: 'error', text: 'Formato no permitido. Usa JPG o PNG.' })
+        if (fileInputRef.current) fileInputRef.current.value = ''
+        return
+      }
+      if (file.size > MAX_AVATAR_BYTES) {
+        setMessage({ type: 'error', text: 'La imagen supera 2MB.' })
+        if (fileInputRef.current) fileInputRef.current.value = ''
+        return
+      }
+      revokeBlob(previewUrl)
+      setSelectedPreset(null)
+      setMessage(null)
       setAvatarFile(file)
       setPreviewUrl(URL.createObjectURL(file))
     }
   }
 
-  const handleRemoveFile = () => {
+  const handleSelectPreset = (url: string) => {
+    revokeBlob(previewUrl)
     setAvatarFile(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    setSelectedPreset(url)
+    setPreviewUrl(url)
+    setMessage(null)
+  }
+
+  const handleRemoveFile = () => {
+    revokeBlob(previewUrl)
+    setAvatarFile(null)
+    setSelectedPreset(null)
     setPreviewUrl(avatarUrl) // Volver a la original
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -79,46 +115,54 @@ export default function SettingsPage() {
 
       // Si hay un archivo nuevo, lo subimos
       if (avatarFile) {
-        const fileExt = avatarFile.name.split('.').pop()
-        const fileName = `${user.id}-${Math.random()}.${fileExt}`
-        const filePath = `${fileName}`
+        const ext = ALLOWED_TYPES[avatarFile.type]
+        const filePath = `${user.id}/${Date.now()}.${ext}`
 
         const { error: uploadError } = await supabase.storage
           .from('avatars')
-          .upload(filePath, avatarFile, { upsert: true })
+          .upload(filePath, avatarFile, { upsert: false, contentType: avatarFile.type })
 
-        if (uploadError) throw uploadError
+        if (uploadError) {
+          setMessage({ type: 'error', text: 'No se pudo subir la imagen. Intenta de nuevo.' })
+          return
+        }
 
         const { data: { publicUrl } } = supabase.storage
           .from('avatars')
           .getPublicUrl(filePath)
           
         finalAvatarUrl = publicUrl
-        setAvatarUrl(publicUrl)
-        setAvatarFile(null)
+      } else if (selectedPreset) {
+        finalAvatarUrl = selectedPreset
       }
 
-      const updates: any = {
-        first_name: firstName,
-        last_name: lastName,
-        updated_at: new Date().toISOString()
-      }
-
-      if (finalAvatarUrl !== '') {
-        updates.avatar_url = finalAvatarUrl
-      }
-
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
-        .update(updates)
-        .eq('id', user.id)
+        .upsert({
+          id: user.id,
+          first_name: firstName,
+          last_name: lastName,
+          updated_at: new Date().toISOString(),
+          ...(finalAvatarUrl ? { avatar_url: finalAvatarUrl } : {}),
+        }, { onConflict: 'id' })
+        .select('id, avatar_url')
+        .maybeSingle()
 
-      if (error) throw error
+      if (error || !data) {
+        setMessage({ type: 'error', text: 'No se pudo actualizar el perfil. Intenta de nuevo.' })
+        return
+      }
 
+      revokeBlob(previewUrl)
+      setAvatarUrl(data.avatar_url ?? finalAvatarUrl)
+      setPreviewUrl(data.avatar_url ?? finalAvatarUrl)
+      setAvatarFile(null)
+      setSelectedPreset(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
       setMessage({ type: 'success', text: 'Perfil actualizado correctamente.' })
     } catch (error: any) {
       console.error('Error updating profile:', error)
-      setMessage({ type: 'error', text: 'No se pudo actualizar el perfil. Recuerda crear el bucket "avatars" en Supabase.' })
+      setMessage({ type: 'error', text: 'No se pudo actualizar el perfil. Intenta de nuevo.' })
     } finally {
       setSaving(false)
     }
@@ -152,21 +196,32 @@ export default function SettingsPage() {
               {/* Avatar Section */}
               <div className="flex flex-col items-center gap-4">
                 <div className="relative">
-                  <div className="w-32 h-32 rounded-3xl bg-gray-100 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0 relative group">
+                  <div
+                    className="w-32 h-32 rounded-3xl bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden flex-shrink-0 relative group"
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Cambiar foto de perfil"
+                    onClick={() => fileInputRef.current?.click()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        fileInputRef.current?.click()
+                      }
+                    }}
+                  >
                     {previewUrl ? (
                       <img src={previewUrl} alt="Avatar" className="w-full h-full object-cover" />
                     ) : (
-                      <User size={48} className="text-gray-300" />
+                      <User size={48} className="text-slate-400" />
                     )}
                     
                     <div 
                       className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                      onClick={() => fileInputRef.current?.click()}
                     >
                       <Upload className="text-white" size={24} />
                     </div>
                   </div>
-                  {avatarFile && (
+                  {(avatarFile || selectedPreset) && (
                     <button 
                       type="button"
                       onClick={handleRemoveFile}
@@ -181,7 +236,7 @@ export default function SettingsPage() {
                   type="file" 
                   ref={fileInputRef}
                   onChange={handleFileChange}
-                  accept="image/*"
+                  accept="image/png,image/jpeg"
                   className="hidden"
                 />
                 <button
@@ -194,6 +249,21 @@ export default function SettingsPage() {
                 <p className="text-xs text-center text-gray-400 max-w-[140px]">
                   Formatos recomendados: JPG, PNG. Max 2MB.
                 </p>
+                <p className="text-xs font-semibold text-gray-500 mt-2">O elige un avatar</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {PRESET_AVATARS.map((url, i) => (
+                    <button
+                      key={url}
+                      type="button"
+                      aria-label={`Avatar ${i + 1}`}
+                      aria-pressed={selectedPreset === url}
+                      onClick={() => handleSelectPreset(url)}
+                      className={`rounded-full ${selectedPreset === url ? 'ring-2 ring-[#1D4ED8] ring-offset-2' : ''}`}
+                    >
+                      <img src={url} alt="" className="w-10 h-10 rounded-full" />
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Form Fields */}

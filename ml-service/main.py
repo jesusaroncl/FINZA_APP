@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,6 +23,13 @@ def health():
     return {"status": "ok"}
 
 
+def _tx_date(t) -> date | None:
+    try:
+        return datetime.strptime(t.get("transaction_date", "")[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
 @app.post("/predict")
 async def predict(request: Request):
     auth = request.headers.get("Authorization", "")
@@ -36,7 +43,11 @@ async def predict(request: Request):
 
     transactions, categories = fetch_user_data(user_id)
 
-    expense_count = sum(1 for t in transactions if t.get("type") == "expense")
+    today = datetime.now().date()
+    expense_count = sum(
+        1 for t in transactions
+        if t.get("type") == "expense" and (d := _tx_date(t)) is not None and d <= today
+    )
     if expense_count < 30:
         return _heuristic_response(transactions, categories)
 
@@ -58,18 +69,14 @@ def _heuristic_response(transactions: list[dict], categories: list[dict]) -> dic
     """Simple heuristic fallback when user has < 30 expense transactions."""
     from collections import defaultdict
     now = datetime.now()
-    month_start = now.replace(day=1)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     by_cat: dict = defaultdict(float)
     for t in transactions:
         if t.get("type") == "expense":
-            d_str = t.get("transaction_date", "")[:10]
-            try:
-                d = datetime.strptime(d_str, "%Y-%m-%d")
-                if d >= month_start:
-                    by_cat[t.get("category_id", "sin-cat")] += t.get("amount", 0)
-            except ValueError:
-                pass
+            d = _tx_date(t)
+            if d is not None and month_start.date() <= d <= now.date():
+                by_cat[t.get("category_id", "sin-cat")] += t.get("amount", 0)
 
     cat_lookup = {c["id"]: c["name"] for c in categories}
     total = sum(by_cat.values())
@@ -96,6 +103,17 @@ def _heuristic_response(transactions: list[dict], categories: list[dict]) -> dic
             reverse=True,
         )
 
+    try:
+        risks = detect_risks(transactions)
+    except Exception as e:
+        print(f"[heuristic] detect_risks failed: {e!r}")
+        risks = []
+    try:
+        recommendations = generate_recommendations(risks, transactions, categories)
+    except Exception as e:
+        print(f"[heuristic] recommendations failed: {e!r}")
+        recommendations = {"alerts": [], "tips": []}
+
     return {
         "mode": "heuristic",
         "generated_at": datetime.utcnow().isoformat() + "Z",
@@ -103,6 +121,6 @@ def _heuristic_response(transactions: list[dict], categories: list[dict]) -> dic
             "next_7_days": {"total": next_7_total, "by_category": scale_categories(next_7_total)},
             "next_30_days": {"total": next_30_total, "by_category": scale_categories(next_30_total)},
         },
-        "risks": [],
-        "recommendations": {"alerts": [], "tips": []},
+        "risks": risks,
+        "recommendations": recommendations,
     }

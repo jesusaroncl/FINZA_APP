@@ -22,7 +22,7 @@ export default function AuthErrorPage() {
           </h1>
 
           <p className="text-gray-600 mb-8">
-            Ha ocurrido un error durante el proceso de autenticación. Por favor, intenta de nuevo.
+            El enlace no es válido o ya expiró. Si ya confirmaste tu cuenta, inicia sesión; si no, vuelve a registrarte o recupera tu contraseña.
           </p>
 
           <Link
@@ -30,6 +30,12 @@ export default function AuthErrorPage() {
             className="w-full block bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-lg transition"
           >
             Volver al Login
+          </Link>
+          <Link
+            href="/auth/forgot-password"
+            className="w-full block border border-slate-300 text-slate-700 font-semibold py-3 rounded-lg transition mt-3"
+          >
+            Recuperar contraseña
           </Link>
         </div>
       </div>

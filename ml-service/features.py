@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
+CUOTA_RE = r"\(\s*(\d+)\s*/\s*(\d+)\s*\)\s*$"
+
 
 EXPENSE_FEATURE_COLS = [
     "day_of_week", "day_of_month", "month", "is_weekend",
@@ -18,6 +20,7 @@ def build_expense_df(transactions: list[dict], categories: list[dict]) -> pd.Dat
     df = pd.DataFrame(transactions)
     df["transaction_date"] = pd.to_datetime(df["transaction_date"], utc=True).dt.tz_localize(None)
     df = df[df["type"] == "expense"].copy()
+    df = df[df["transaction_date"] <= pd.Timestamp(datetime.now())]
 
     if df.empty:
         return pd.DataFrame()
@@ -47,6 +50,40 @@ def build_expense_df(transactions: list[dict], categories: list[dict]) -> pd.Dat
     return df
 
 
+def _monthly_cuotas(expenses: pd.DataFrame, month_start: datetime, now: datetime) -> float:
+    next_month_start = (month_start + timedelta(days=32)).replace(day=1)
+    desc = (
+        expenses["description"].fillna("").astype(str)
+        if "description" in expenses.columns
+        else pd.Series("", index=expenses.index)
+    )
+    m = desc.str.extract(CUOTA_RE)
+    n = pd.to_numeric(m[0], errors="coerce")
+    total = pd.to_numeric(m[1], errors="coerce")
+    pattern_mask = n.notna() & total.notna() & (total > 1) & (n >= 1) & (n <= total)
+    in_month = (
+        (expenses["transaction_date"] >= pd.Timestamp(month_start)) &
+        (expenses["transaction_date"] < pd.Timestamp(next_month_start))
+    )
+    pattern_sum = expenses.loc[pattern_mask & in_month, "amount"].sum()
+
+    legacy_sum = 0.0
+    if "cuotas" in expenses.columns and "monto_por_cuota" in expenses.columns:
+        c = expenses["cuotas"].fillna(1).astype(float)
+        legacy_mask = (~pattern_mask) & (c > 1)
+        legacy = expenses.loc[legacy_mask]
+        if not legacy.empty:
+            def is_active(row):
+                d = row["transaction_date"]
+                diff = (month_start.year - d.year) * 12 + (month_start.month - d.month)
+                return d <= pd.Timestamp(now) and 0 <= diff < int(row["cuotas"])
+
+            active = legacy.apply(is_active, axis=1)
+            legacy_sum = legacy.loc[active, "monto_por_cuota"].fillna(0).sum()
+
+    return float(pattern_sum + legacy_sum)
+
+
 def build_risk_features(transactions: list[dict], reference_date: datetime | None = None) -> dict:
     """Scalar features for a transaction window used by LightGBM risk model.
 
@@ -65,36 +102,35 @@ def build_risk_features(transactions: list[dict], reference_date: datetime | Non
     now = reference_date if reference_date is not None else datetime.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     week_ago = now - timedelta(days=7)
+    past_exp = expenses[expenses["transaction_date"] <= pd.Timestamp(now)]
+    past_inc = income_df[income_df["transaction_date"] <= pd.Timestamp(now)]
 
-    monthly_income = income_df[
-        income_df["transaction_date"] >= pd.Timestamp(month_start)
+    monthly_income = past_inc[
+        past_inc["transaction_date"] >= pd.Timestamp(month_start)
     ]["amount"].sum()
-    if monthly_income == 0 and not income_df.empty:
-        monthly_income = income_df["amount"].mean() * 30
+    if monthly_income == 0 and not past_inc.empty:
+        monthly_income = past_inc["amount"].mean() * 30
     if monthly_income == 0:
         monthly_income = 1.0
 
-    cuotas_monthly = 0.0
-    if "monto_por_cuota" in expenses.columns and "cuotas" in expenses.columns:
-        active = expenses[expenses["cuotas"].fillna(1).astype(float) > 1]
-        cuotas_monthly = active["monto_por_cuota"].fillna(0).sum()
+    cuotas_monthly = _monthly_cuotas(expenses, month_start, now)
     cuotas_to_income_ratio = min(cuotas_monthly / monthly_income, 3.0)
 
-    recent = expenses[expenses["transaction_date"] >= pd.Timestamp(week_ago)]
+    recent = past_exp[past_exp["transaction_date"] >= pd.Timestamp(week_ago)]
     small_tx_count_7d = float(len(recent[recent["amount"] < 15]))
 
-    month_exp = expenses[
-        expenses["transaction_date"] >= pd.Timestamp(month_start)
+    month_exp = past_exp[
+        past_exp["transaction_date"] >= pd.Timestamp(month_start)
     ]["amount"].sum()
     monthly_totals = (
-        expenses.groupby(expenses["transaction_date"].dt.to_period("M"))["amount"].sum()
+        past_exp.groupby(past_exp["transaction_date"].dt.to_period("M"))["amount"].sum()
     )
     hist_avg = monthly_totals.iloc[:-1].mean() if len(monthly_totals) > 1 else month_exp
     if hist_avg == 0:
         hist_avg = 1.0
     expense_velocity = min(month_exp / hist_avg, 5.0)
 
-    month_expenses = expenses[expenses["transaction_date"] >= pd.Timestamp(month_start)]
+    month_expenses = past_exp[past_exp["transaction_date"] >= pd.Timestamp(month_start)]
     total_month = month_expenses["amount"].sum()
     top_category_share = 0.0
     if total_month > 0:
@@ -126,6 +162,9 @@ def build_risk_training_data(transactions: list[dict]) -> tuple[pd.DataFrame, pd
     df = pd.DataFrame(transactions)
     df["transaction_date"] = pd.to_datetime(df["transaction_date"], utc=True).dt.tz_localize(None)
     df = df.sort_values("transaction_date")
+    df = df[df["transaction_date"] <= pd.Timestamp(datetime.now())]
+    if df.empty:
+        return pd.DataFrame(), pd.DataFrame()
 
     min_date = df["transaction_date"].min().to_pydatetime()
     max_date = df["transaction_date"].max().to_pydatetime()
